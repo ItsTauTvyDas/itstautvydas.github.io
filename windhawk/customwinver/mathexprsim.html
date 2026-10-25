@@ -137,7 +137,7 @@
   #exModal .ex-desc { margin-top: .2rem; color: var(--bs-secondary-color); font-size: .78rem; line-height: 1.25; }
   #exModal .ex-desc strong { color: var(--bs-body-color); }
   body.sim-stacked #exModal { z-index: 1055; }
-  body.sim-stacked #simModal { z-index: 1070; }
+  #simModal { z-index: 1070; }  /* always above any backdrop, stacked or not */
 </style>
 </head>
 <body class="bg-body-tertiary">
@@ -1030,25 +1030,28 @@ $('examples').addEventListener('click', () => {
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || !exModalEl.classList.contains('show')) return;
-  if ($('simModal').classList.contains('show')) return;  // the preview handles its own Escape
+  // The preview handles its own Escape. 'show' is already gone while it fades out, so also check the stacked flag.
+  if ($('simModal').classList.contains('show') || document.body.classList.contains('sim-stacked')) return;
   exModal.hide();
 });
 
 const simModalEl = $('simModal');
 simModalEl.addEventListener('show.bs.modal', () => {
   // Keep the examples dialog underneath and give the preview its own, higher backdrop.
-  document.body.classList.toggle('sim-stacked', exModalEl.classList.contains('show'));
+  // A backdrop already in the page also means the examples dialog is still fading in or out.
+  document.body.classList.toggle('sim-stacked', exModalEl.classList.contains('show') || !!document.querySelector('.modal-backdrop'));
 });
-simModalEl.addEventListener('shown.bs.modal', () => {
-  if (!document.body.classList.contains('sim-stacked')) return;
-  const backdrops = [...document.querySelectorAll('.modal-backdrop')];
-  backdrops.forEach((b, i) => {
-    b.style.zIndex = i === backdrops.length - 1 ? '1060' : '1050';
-  });
-});
+// Bootstrap appends each backdrop to <body> when its modal starts to show. Style it right then (not after
+// the fade-in), so a backdrop can never sit above the preview, even if dialogs are opened or closed quickly.
+new MutationObserver(list => {
+  for (const m of list) for (const n of m.addedNodes) {
+    if (n.nodeType === 1 && n.classList.contains('modal-backdrop')) {
+      n.style.zIndex = document.body.classList.contains('sim-stacked') ? '1060' : '';
+    }
+  }
+}).observe(document.body, { childList: true });
 simModalEl.addEventListener('hidden.bs.modal', () => {
   document.body.classList.remove('sim-stacked');
-  for (const b of document.querySelectorAll('.modal-backdrop')) b.style.zIndex = '';
   // Closing the stacked preview must not unlock scrolling behind the examples dialog.
   if (exModalEl.classList.contains('show')) document.body.classList.add('modal-open');
 });
