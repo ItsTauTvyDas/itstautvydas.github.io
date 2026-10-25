@@ -1,0 +1,2202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WinVer math expression builder</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  #ws { height: 72vh; min-height: 420px; position: relative; }
+  #out { min-width: 0; }
+
+  /* Simulate modal */
+  #simModal .modal-dialog {
+    width: calc(100vw - 48px);
+    max-width: calc(100vw - 48px);
+    height: calc(100vh - 48px);
+    margin: 24px auto;
+  }
+  #simModal .modal-content { height: 100%; }
+  #simModal .modal-header { flex-wrap: wrap; }
+  #sim-playground {
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+    background-color: #f6f8fa;
+    background-image:
+      linear-gradient(45deg, #e9edf2 25%, transparent 25%, transparent 75%, #e9edf2 75%),
+      linear-gradient(45deg, #e9edf2 25%, transparent 25%, transparent 75%, #e9edf2 75%);
+    background-size: 24px 24px;
+    background-position: 0 0, 12px 12px;
+  }
+  #sim-win {
+    position: absolute;
+    transform-origin: top left;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f0f0f0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .18), 0 18px 48px rgba(0, 0, 0, .32);
+    user-select: none;
+    outline: none;
+  }
+  #sim-titlebar {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px 0 9px;
+    background: #f1f3f8;
+    color: #000000;
+    cursor: default;
+  }
+  #sim-win.inactive #sim-titlebar { color: #a9a9a9; }
+  #sim-titlebar .sim-title {
+    flex: 1;
+    position: relative;
+    top: -1px;
+    font-size: 12px;
+    line-height: 30px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #sim-close {
+    flex: none;
+    position: relative;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: 0;
+    background: none;
+    line-height: 0;
+    color: #9a9b9f;
+    transform: translateY(-1px);
+    cursor: pointer;
+    transition: color .12s ease;
+  }
+  /* Windows 11 style hover: a full-height red block flush with the top-right corner. */
+  #sim-close::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: -10px;
+    right: -10px;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    transition: background-color .12s ease;
+  }
+  #sim-close svg { display: block; width: 10px; height: 10px; }
+  #sim-close:hover { color: #ffffff; }
+  #sim-close:hover::before { background: #c42b1c; }
+  #sim-close:active::before { background: #b22a1c; }
+  #sim-win.inactive #sim-close { color: #b4b5b8; }
+  #sim-win.inactive #sim-close:hover { color: #ffffff; }
+  #sim-win.inactive #sim-close:hover::before { background: #b22a1c; }
+  #sim-client { position: relative; overflow: hidden; background: #f0f0f0; }
+  #sim-logo { position: absolute; left: 81px; top: 13px; width: 314px; height: 58px; pointer-events: none; }
+  .sim-ctrl { position: absolute; overflow: hidden; box-sizing: border-box; cursor: pointer; }
+  .sim-ctrl-guide {
+    position: absolute;
+    inset: 0;
+    outline: 1px dashed rgba(0, 0, 0, .22);
+    outline-offset: -1px;
+    pointer-events: none;
+  }
+  .sim-ctrl-text {
+    position: absolute;
+    inset: 0;
+    font-size: 11px;
+    line-height: 13px;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    color: #000000;
+  }
+  .sim-ctrl.center .sim-ctrl-text { display: flex; align-items: center; justify-content: center; text-align: center; }
+  .sim-ctrl:not(.center) .sim-ctrl-text { top: -1px; }
+  .sim-ctrl.ok { background: #fdfdfd; border: 1px solid #bababa; border-radius: 4px; }
+  .sim-ctrl.sep { background: #a0a0a0; box-shadow: inset 0 -1px 0 #ffffff; }
+  .sim-link { color: #0066cc; text-decoration: underline; }
+  #simModal .sim-field { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
+  #simModal .sim-field > label { margin: 0; }
+  #sim-text { flex: 1 1 240px; min-width: 200px; max-width: 440px; height: 46px; resize: none; }
+  #sim-geom { font-size: .85rem; }
+  #sim-err { max-width: 30rem; white-space: normal; }
+
+  /* Examples modal */
+  #exModal .modal-dialog {
+    max-width: 1040px;
+    height: calc(100vh - 48px);
+    margin: 24px auto;
+  }
+  #exModal .modal-header { flex-wrap: wrap; }
+  #exModal .ex-row { padding: .55rem 0; border-bottom: 1px solid var(--bs-border-color-translucent); }
+  #exModal .ex-row:first-child { padding-top: .1rem; }
+  #exModal .ex-row:last-child { border-bottom: 0; }
+  #exModal .ex-expr { flex: 1 1 18rem; width: auto; min-width: 12rem; }
+  #exModal .ex-desc { margin-top: .2rem; color: var(--bs-secondary-color); font-size: .78rem; line-height: 1.25; }
+  #exModal .ex-desc strong { color: var(--bs-body-color); }
+  body.sim-stacked #exModal { z-index: 1055; }
+  body.sim-stacked #simModal { z-index: 1070; }
+</style>
+</head>
+<body class="bg-body-tertiary">
+<div class="container-fluid py-3">
+  <h1 class="h4 mb-1">Fully Customizable WinVer: math expression builder</h1>
+  <p class="text-body-secondary small mb-3">Build an expression from blocks, or type or paste one below and press Apply. Only blocks attached inside the purple blocks count.</p>
+
+  <div class="card mb-3 shadow-sm">
+    <div class="card-body">
+      <div class="row g-2 align-items-center">
+        <div class="col-12 col-lg-auto">
+          <div class="btn-group" role="group" aria-label="Expression type">
+            <input type="radio" class="btn-check" name="mode" id="m-pos" value="pos" checked>
+            <label class="btn btn-outline-primary" for="m-pos">Position / size</label>
+            <input type="radio" class="btn-check" name="mode" id="m-col" value="col">
+            <label class="btn btn-outline-primary" for="m-col">Color</label>
+          </div>
+        </div>
+        <div class="col-12 col-lg">
+          <div class="input-group has-validation">
+            <span class="input-group-text">Expression</span>
+            <input id="out" class="form-control font-monospace" spellcheck="false" autocomplete="off" aria-label="Math expression" placeholder="!dcx+10;d;d;d">
+            <button id="apply" class="btn btn-primary" type="button">Apply to blocks</button>
+            <button id="copy" class="btn btn-outline-secondary" type="button">Copy</button>
+            <button id="tidy" class="btn btn-outline-secondary" type="button">Tidy blocks</button>
+            <button id="examples" class="btn btn-outline-primary" type="button">Examples</button>
+            <button id="simulate" class="btn btn-outline-success" type="button">Simulate</button>
+            <div id="err" class="invalid-feedback"></div>
+          </div>
+        </div>
+      </div>
+      <div class="form-text mt-2">Position / size format is <code>x;y;width;height</code>. An empty field is written as <code>d</code> (default). Expressions start with <code>!</code>, except for the standalone constants <code>d</code>, <code>w</code> and <code>h</code>, which work without it.</div>
+    </div>
+  </div>
+
+  <div id="ws" class="border rounded bg-white"></div>
+  <div id="info" class="alert alert-secondary mt-3 mb-0 py-2 small"></div>
+</div>
+
+<div class="modal fade" id="simModal" tabindex="-1" aria-labelledby="simModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2 gap-2">
+        <h2 class="modal-title fs-6 me-2" id="simModalLabel">Simulate</h2>
+        <div class="d-flex align-items-center gap-2">
+          <label for="sim-control" class="small text-body-secondary mb-0">Control</label>
+          <select id="sim-control" class="form-select form-select-sm" style="width:auto"></select>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+          <div class="form-check mb-0">
+            <input id="sim-apply-pos" class="form-check-input" type="checkbox" checked>
+            <label class="form-check-label small" for="sim-apply-pos">Position / size</label>
+          </div>
+          <div class="form-check mb-0">
+            <input id="sim-apply-col" class="form-check-input" type="checkbox">
+            <label class="form-check-label small" for="sim-apply-col">Color</label>
+          </div>
+        </div>
+        <div class="small text-body-secondary ms-2 d-none d-xl-block">Drag the title bar &middot; click the window to focus it</div>
+        <div class="ms-auto text-end"><code id="sim-geom" class="user-select-all">color: none, pos/size: 0,0,0,0</code></div>
+        <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0" id="sim-playground">
+        <div id="sim-win" tabindex="0">
+          <div id="sim-titlebar">
+            <span class="sim-title">About Windows</span>
+            <button id="sim-close" type="button" aria-label="Close simulation window" title="Close">
+              <svg viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M0.5 0.5 9.5 9.5M9.5 0.5 0.5 9.5" stroke="currentColor" stroke-width="1" fill="none"></path>
+              </svg>
+            </button>
+          </div>
+          <div id="sim-client">
+            <img id="sim-logo" src="logo.png" alt="">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer py-2 flex-wrap align-items-center">
+        <div class="sim-field">
+          <label for="sim-color-target" class="small text-body-secondary">Color</label>
+          <select id="sim-color-target" class="form-select form-select-sm" style="width:auto">
+            <option value="text">text</option>
+            <option value="fill">fill</option>
+            <option value="textoutline">textoutline</option>
+          </select>
+        </div>
+        <div class="sim-field flex-grow-1">
+          <label for="sim-text" class="small text-body-secondary">Text</label>
+          <textarea id="sim-text" class="form-control form-control-sm font-monospace" rows="2" spellcheck="false" autocomplete="off"></textarea>
+          <button id="sim-text-reset" class="btn btn-outline-secondary btn-sm" type="button" title="Restore this control's default text">Reset</button>
+        </div>
+        <div class="sim-field" id="sim-fill-wrap" hidden>
+          <div class="form-check mb-0">
+            <input id="sim-showtext" class="form-check-input" type="checkbox" checked>
+            <label class="form-check-label small" for="sim-showtext">Show text</label>
+          </div>
+        </div>
+        <div class="sim-field" id="sim-outline-wrap" hidden>
+          <label for="sim-outline" class="small text-body-secondary">Outline</label>
+          <input id="sim-outline" class="form-control form-control-sm font-monospace" style="width:7rem" value="1;1;1;1" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="sim-field">
+          <label for="sim-w" class="small text-body-secondary">Window</label>
+          <input id="sim-w" type="number" class="form-control form-control-sm" style="width:5.5rem" min="1" max="5000" value="458">
+          <span class="text-body-secondary small">&times;</span>
+          <input id="sim-h" type="number" class="form-control form-control-sm" style="width:5.5rem" min="1" max="5000" value="391">
+          <span class="text-body-secondary small">px</span>
+        </div>
+        <div class="ms-auto text-end">
+          <div id="sim-err" class="text-danger" style="font-size:.7rem"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="exModal" tabindex="-1" aria-labelledby="exModalLabel" aria-hidden="true" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2 gap-2 align-items-center">
+        <h2 class="modal-title fs-6 me-1" id="exModalLabel">Examples</h2>
+        <span id="ex-kind-badge" class="badge rounded-pill text-bg-primary">Position / size</span>
+        <span class="small text-body-secondary ms-2 d-none d-lg-inline">Edit any expression, then Apply or Simulate.</span>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="ex-pane-pos"></div>
+        <div id="ex-pane-col" hidden></div>
+      </div>
+      <div class="modal-footer py-2">
+        <span class="small text-body-secondary">This list follows the current builder mode. Apply writes the expression into the builder; Simulate previews it without changing the builder or the expression field.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/blockly@11/blockly_compressed.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/blockly@11/msg/en.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const lines = s => s.trim().split('\n').map(l => l.split('|'));
+const DEF_INFO = 'Select a block to see what it does. Hovering a block in the toolbox shows that block\'s info; move the mouse away to go back to the selected block.';
+
+/* ---------- data ---------- */
+const CONSTS = {};
+lines(`
+w|Main window client width.
+h|Main window client height.
+d|Default value of this field: the control's initial X, Y, width or height (position fields only).
+cx|Control's current X after the mod's calculations (Modify controls only).
+cy|Control's current Y (Modify controls only).
+cw|Control's current width (Modify controls only).
+ch|Control's current height (Modify controls only).
+dcx|Control's initial X (Modify controls only).
+dcy|Control's initial Y (Modify controls only).
+dcw|Control's initial width (Modify controls only).
+dch|Control's initial height (Modify controls only).
+centerx|X that centers the control in the window (Modify controls only).
+centery|Y that centers the control in the window (Modify controls only).
+pi|3.141593
+e|2.718282
+focused|1 if the window is focused, 0 if not.
+mousex|Mouse X on the screen.
+mousey|Mouse Y on the screen.
+mouserelx|Mouse X relative to the window.
+mouserely|Mouse Y relative to the window.
+mouseinwindow|1 if the mouse is inside the window, 0 if not.
+mouseincontrol|1 if the mouse is inside the control, 0 if not (Modify controls only).
+time|Milliseconds since the window was shown. Needs dyn to update.
+accent|Your Windows accent color, as a color number.
+darkmode|1 if Windows apps use dark mode, 0 if not.
+`).forEach(([k, v]) => CONSTS[k] = v);
+
+const KW = {
+  loop: 'Mode for shift(): goes from start to end and back, over and over.',
+  forward: 'Mode for shift(): goes from start to end, then jumps back to start.',
+  x: 'Attribute for steal(): the control\'s X.',
+  y: 'Attribute for steal(): the control\'s Y.'
+};
+['LeftIcon','Separator','ProductName','Version','Copyright','Spacer1','LegalNotice','Spacer2','LicenseInfo','RegisteredUser1','RegisteredUser2','OkButton']
+  .forEach(n => KW[n] = 'Control name, used by steal(), controltch() and controlin().');
+
+const FN = {};
+lines(`
+sqrt|m|1|Square root.
+cbrt|m|1|Cube root.
+pow|m|2|Raises the base to the power of the exponent (same as base^exponent).|base,exponent
+hypot|m|2|Diagonal length from two sides: sqrt(side 1² + side 2²).|side 1,side 2
+abs|m|1|Removes the minus sign.
+sign|m|1|-1 for negative, 0 for zero, 1 for positive.
+min|m|2|The smaller of the two values.|value 1,value 2
+max|m|2|The larger of the two values.|value 1,value 2
+clamp|m|3|Keeps the value between the lowest and the highest.|value,lowest,highest
+remainder|m|2|Remainder of a division, quotient rounded to nearest (can be negative).|number,divided by
+fmod|m|2|Remainder of a division, same sign as the number.|number,divided by
+mod|m|2|Like fmod but never negative. Good for wrapping: mod(-1, 360) is 359.|number,divided by
+round|m|1|Round to nearest (.5 goes up).
+floor|m|1|Round down.
+ceil|m|1|Round up.
+trunc|m|1|Cut off the decimals.
+nearbyint|m|1|Round to nearest, .5 goes to the nearest even number.
+rint|m|1|Same as nearbyint.
+log|m|1|Natural logarithm.
+log10|m|1|Base 10 logarithm.
+log2|m|1|Base 2 logarithm.
+log1p|m|1|log(1 + value).
+exp|m|1|e to the power of the value.
+exp2|m|1|2 to the power of the value.
+expm1|m|1|e^value - 1.
+lerp|m|3|Blends between two values: amount 0 gives the first, 1 gives the second.|from,to,amount (0-1)
+map|m|5|Converts a value from one range to another range.|value,from min,from max,to min,to max
+combine|m|1,2,3,4,5,6|Joins numbers digit by digit: combine(2,06,70,54) is 267054. Max 15 digits.|number 1,number 2,number 3,number 4,number 5,number 6
+sin|t|1|Sine. Radians by default; use the Angle unit block for degrees.
+cos|t|1|Cosine. Radians by default; use the Angle unit block for degrees.
+tan|t|1|Tangent. Radians by default; use the Angle unit block for degrees.
+asin|t|1|Inverse sine, returns radians. Input from -1 to 1.
+acos|t|1|Inverse cosine, returns radians. Input from -1 to 1.
+atan|t|1|Inverse tangent, returns radians.
+atan2|t|2|Angle in radians of the point (x, y).|y,x
+sinh|t|1|Hyperbolic sine.
+cosh|t|1|Hyperbolic cosine.
+tanh|t|1|Hyperbolic tangent.
+rads|t|1|Converts degrees to radians.
+degs|t|1|Converts radians to degrees.
+rgb|c|3|Color from red, green and blue (0-255 each).|red,green,blue
+hsv|c|3|Color from hue (0-360), saturation and brightness (0-100).|hue,saturation,brightness
+oklch|c|3|Color from lightness (0-100), colorfulness (0-100) and hue. Smoother rainbows than hsv.|lightness,colorfulness,hue
+mix|c|3|Blends two colors smoothly: amount 0 gives color 1, 1 gives color 2.|color 1,color 2,amount (0-1)
+red|c|1|Red channel (0-255) of a color.|color
+green|c|1|Green channel (0-255) of a color.|color
+blue|c|1|Blue channel (0-255) of a color.|color
+lighten|c|2|Makes a color lighter by the given amount (0-100).|color,amount (0-100)
+darken|c|2|Makes a color darker by the given amount (0-100).|color,amount (0-100)
+invert|c|1|Opposite color.|color
+gray|c|1|Removes the color but keeps the brightness.|color
+contrast|c|1|Black or white, whichever is easier to read on the color.|color
+dyn|d|1,2|Re-evaluates the whole field every N ms (min 10). One per field, no nesting. Needed for anything real-time.|value,update every (ms)
+shift|d|2,3,4,5,6|Moves a value one step on every dyn update. Must be inside dyn. Mode is forward or loop.|start,end,step size,mode,skip updates,initial skip
+shift2|d|2,3,4,5,6|Same as shift, but the last step stops exactly at the end.|start,end,step size,mode,skip updates,initial skip
+if|d|3|Gives the "if true" value when the condition is true, otherwise the "if false" value. Conditions use comparisons, AND and OR.|condition,if true,if false
+replace|d|3,5,7,9,11,13,15,17,19,21|Swaps values: if the value equals "if equals", it becomes "change to". Continuous: a changed value can trigger the next pair.
+replace2|d|3,5,7,9,11,13,15,17,19,21|Like replace, but not continuous: each value is changed at most once.
+steal|d|2|Gets another control's x, y, w or h.|control,property
+controltch|d|2|1 if the two controls' bounds touch, else 0.|first control,second control
+controlin|d|2|1 if the first control is inside the second control, else 0.|control,is inside control
+irnd|d|0,2|Random whole number: 0 to 2147483647, or between the lowest and highest.|lowest,highest
+drnd|d|0,2|Random decimal: 0 to 1, or between the lowest and highest.|lowest,highest
+`).forEach(([n, g, c, d, l]) => FN[n] = { g, c: c.split(',').map(Number), d, l: l ? l.split(',') : null, off: 0 });
+// replace / replace2: the first input (the value) is not counted in the dropdown
+['replace', 'replace2'].forEach(n => {
+  FN[n].off = 1;
+  FN[n].l = Array.from({ length: 21 }, (_, i) => i ? (i % 2 ? 'if equals ' : 'change to ') + Math.ceil(i / 2) : 'value');
+});
+
+const HUE = { num: 230, const: 330, kw: 160, var: 330, op: 230, cmp: 210, logic: 210, unit: 260, m: 230, t: 260, c: 20, d: 120 };
+const ROOTS = {
+  pos: ['root_x', 'root_y', 'root_w', 'root_h'],
+  col: ['root_c']
+};
+
+/* ---------- block definitions ---------- */
+function def(type, hue, build, d) {
+  Blockly.Blocks[type] = {
+    init() {
+      this.setOutput(true, 'N');
+      this.setColour(hue);
+      build.call(this);
+      this.d = typeof d === 'function' ? d.bind(this) : () => d;
+      this.setTooltip(() => this.d());
+    }
+  };
+}
+const inp = (b, n) => b.appendValueInput(n).setCheck('N');
+const dd = (o, v) => new Blockly.FieldDropdown(o, v);
+
+def('num', HUE.num, function () { this.appendDummyInput().appendField(new Blockly.FieldNumber(0), 'V'); }, 'A plain number.');
+def('const', HUE.const, function () { this.appendDummyInput().appendField(dd(Object.keys(CONSTS).map(k => [k, k])), 'N'); },
+  function () { const k = this.getFieldValue('N'); return k + ': ' + CONSTS[k]; });
+def('kw', HUE.kw, function () { this.appendDummyInput().appendField(dd(Object.keys(KW).map(k => [k, k])), 'N'); },
+  function () { const k = this.getFieldValue('N'); return k + ': ' + KW[k]; });
+def('var', HUE.var, function () {
+  this.appendDummyInput().appendField('var').appendField(new Blockly.FieldTextInput('myvar', v => v.replace(/[^a-z]/g, '')), 'N');
+}, 'Your own named variable (lowercase letters only). Define it in the Custom math constants/variables setting.');
+def('neg', HUE.op, function () { inp(this, 'A').appendField('−'); this.setInputsInline(false); }, 'Negates a value (puts a minus in front).');
+def('op', HUE.op, function () {
+  inp(this, 'A');
+  inp(this, 'B').appendField(dd([['+', '+'], ['−', '-'], ['×', '*'], ['÷', '/'], ['^ power', '^']]), 'OP');
+  this.setInputsInline(false);
+}, function () { return { '+': 'Adds two values.', '-': 'Subtracts the right value from the left.', '*': 'Multiplies two values.', '/': 'Divides the left value by the right.', '^': 'Raises the left value to the power of the right.' }[this.getFieldValue('OP')]; });
+def('cmp', HUE.cmp, function () {
+  inp(this, 'A');
+  inp(this, 'B').appendField(dd([['<', '<'], ['>', '>'], ['≤', '<='], ['≥', '>='], ['=', '=']]), 'OP');
+  this.setInputsInline(false);
+}, 'Compares two values and gives 1 (true) or 0 (false). "=" is exact, so use it with whole numbers. Comparisons cannot be chained: use AND.');
+def('logic', HUE.logic, function () {
+  inp(this, 'A');
+  inp(this, 'B').appendField(dd([['and', '&'], ['or', '|']]), 'OP');
+  this.setInputsInline(false);
+}, function () { return this.getFieldValue('OP') === '&' ? 'AND: 1 only if both sides are non-zero.' : 'OR: 1 if either side is non-zero.'; });
+def('unit', HUE.unit, function () {
+  inp(this, 'A');
+  this.appendDummyInput().appendField(dd([['degrees', 'deg'], ['radians', 'rad']]), 'U');
+  this.setInputsInline(false);
+}, 'Angle unit. Use inside sin, cos or tan to give the angle in degrees (or radians), e.g. sin(90deg).');
+
+function root(type, label, d) {
+  Blockly.Blocks[type] = {
+    init() {
+      this.setColour(290);
+      this.appendValueInput('E').setCheck('N').appendField(label);
+      this.setDeletable(false);
+      this.setMovable(false); // roots stay put: layoutRoots() owns their position
+      this.setInputsInline(false);
+      this.contextMenu = false;
+      this.d = () => d;
+      this.setTooltip(d);
+    }
+  };
+}
+root('root_x', 'X position', 'X position of the control (left edge). Leave empty to keep the default.');
+root('root_y', 'Y position', 'Y position of the control (top edge). Leave empty to keep the default.');
+root('root_w', 'Width', 'Width of the control. Leave empty to keep the default.');
+root('root_h', 'Height', 'Height of the control. Leave empty to keep the default.');
+root('root_c', 'Color', 'Final color. The result must be a color number (0-16777215): use rgb(), hsv(), oklch() or mix().');
+
+Object.entries(FN).forEach(([name, f]) => {
+  const single = f.c.length === 1 && f.c[0] === 1; // one input: name and input share one row
+  Blockly.Blocks['f_' + name] = {
+    init() {
+      this.setOutput(true, 'N');
+      this.setColour(HUE[f.g]);
+      this.setInputsInline(false);
+      this.n = 0;
+      if (single) {
+        // one-argument functions: just the name and the socket, no placeholder text, e.g. sin (x) or red (color)
+        inp(this, 'A0').appendField(name);
+        this.n = 1;
+      } else {
+        const h = this.appendDummyInput('H').appendField(name);
+        if (f.c.length > 1) h.appendField(dd(f.c.map(n => [(n - f.off) + ((n - f.off) === 1 ? ' arg' : ' args'), '' + n]), v => { this.shape(+v); return v; }), 'C');
+        this.shape(f.c[0]);
+      }
+      this.d = () => name + ': ' + f.d;
+      this.setTooltip(() => this.d());
+    },
+    shape(n) {
+      for (let i = this.n; i < n; i++) inp(this, 'A' + i).appendField((f.l && f.l[i]) || 'value ' + (i + 1));
+      for (let i = this.n - 1; i >= n; i--) this.removeInput('A' + i);
+      this.n = n;
+    },
+    saveExtraState() { return { n: this.n }; },
+    loadExtraState(s) { this.shape(s.n); const c = this.getField('C'); if (c) c.setValue('' + s.n); }
+  };
+});
+
+/* ---------- toolbox ---------- */
+const sh = (v = 0) => ({ shadow: { type: 'num', fields: { V: v } } });
+const blk = (type, fields, inputs) => ({ kind: 'block', type, fields, inputs });
+const fnEntry = name => {
+  const f = FN[name], inputs = {};
+  for (let i = 0; i < f.c[0]; i++) inputs['A' + i] = sh(name === 'if' && i === 0 ? 1 : 0);
+  const e = blk('f_' + name, undefined, inputs);
+  if (f.c.length > 1) e.extraState = { n: f.c[0] };
+  return e;
+};
+const names = g => Object.keys(FN).filter(n => FN[n].g === g).map(fnEntry);
+const cat = (name, colour, contents) => ({ kind: 'category', name, colour: '' + colour, contents });
+const AB = { A: sh(), B: sh() };
+
+const toolbox = {
+  kind: 'categoryToolbox',
+  contents: [
+    cat('Values', HUE.num, [blk('num'), ...Object.keys(CONSTS).map(k => blk('const', { N: k })), ...Object.keys(KW).map(k => blk('kw', { N: k })), blk('var')]),
+    cat('Operators', HUE.op, [
+      ...['+', '-', '*', '/', '^'].map(o => blk('op', { OP: o }, AB)),
+      blk('neg', undefined, { A: sh() }),
+      ...['<', '>', '<=', '>=', '='].map(o => blk('cmp', { OP: o }, AB)),
+      blk('logic', { OP: '&' }), blk('logic', { OP: '|' })
+    ]),
+    cat('Math', HUE.m, names('m')),
+    cat('Trig and angles', HUE.t, [...names('t'), blk('unit', { U: 'deg' }, { A: sh(90) })]),
+    cat('Colors', HUE.c, names('c')),
+    cat('Dynamic and logic', HUE.d, names('d'))
+  ]
+};
+
+/* ---------- code generation ---------- */
+const wrap = (r, m) => r.p < m ? '(' + r.s + ')' : r.s;
+const PR = { '+': 4, '-': 4, '*': 5, '/': 5, '^': 7 };
+const RMIN = { '+': 4, '-': 5, '*': 5, '/': 6, '^': 6 };
+// precedence: or 1, and 2, compare 3, add 4, mul 5, unary 6, power 7, atom 8
+function gen(b) {
+  if (!b) return { s: '0', p: 8 };
+  const t = b.type, f = n => b.getFieldValue(n), g = n => gen(b.getInputTargetBlock(n));
+  if (t === 'num') { const v = f('V'); return { s: '' + v, p: v < 0 ? 6 : 8 }; }
+  if (t === 'const' || t === 'kw') return { s: f('N'), p: 8 };
+  if (t === 'var') return { s: f('N') || '0', p: 8 };
+  if (t === 'neg') { const s = wrap(g('A'), 6); return { s: '-' + (s[0] === '-' ? '(' + s + ')' : s), p: 6 }; }
+  if (t === 'op') {
+    const o = f('OP'), L = wrap(g('A'), o === '^' ? 8 : PR[o]);
+    let R = wrap(g('B'), RMIN[o]);
+    if (o !== '^' && R[0] === '-') R = '(' + R + ')';
+    return { s: L + o + R, p: PR[o] };
+  }
+  if (t === 'cmp') return { s: wrap(g('A'), 4) + f('OP') + wrap(g('B'), 4), p: 3 };
+  if (t === 'logic') {
+    const and = f('OP') === '&';
+    return { s: wrap(g('A'), and ? 2 : 1) + (and ? ' & ' : ' | ') + wrap(g('B'), and ? 3 : 2), p: and ? 2 : 1 };
+  }
+  if (t === 'unit') {
+    const c = b.getInputTargetBlock('A'), r = gen(c);
+    const atom = c && ((c.type === 'num' && r.p === 8) || c.type.startsWith('f_'));
+    return { s: (atom ? r.s : '(' + r.s + ')') + f('U'), p: 4 };
+  }
+  const name = t.slice(2), args = [];
+  for (let i = 0; i < b.n; i++) args.push(wrap(gen(b.getInputTargetBlock('A' + i)), name === 'if' && i === 0 ? 1 : 4));
+  return { s: name + '(' + args.join(', ') + ')', p: 8 };
+}
+
+/* ---------- text -> tree ---------- */
+function parseExpr(src) {
+  let p = 0;
+  const sp = () => { while (src[p] === ' ' || src[p] === '\t') p++; };
+  const peek = () => { sp(); return src[p]; };
+  const eat = c => { if (peek() === c) { p++; return true; } return false; };
+  const err = m => { throw new Error(m + ' (character ' + (p + 1) + ')'); };
+  const bin = (t, o, a, b) => ({ t, o, a, b });
+
+  function or() { let l = and(); while (eat('|')) l = bin('logic', '|', l, and()); return l; }
+  function and() { let l = cmp(); while (eat('&')) l = bin('logic', '&', l, cmp()); return l; }
+  function cmp() {
+    const l = add(); sp();
+    const m = /^(<=|>=|<|>|=)/.exec(src.slice(p));
+    if (!m) return l;
+    p += m[0].length;
+    return bin('cmp', m[1], l, add());
+  }
+  function add() {
+    let l = mul();
+    for (;;) {
+      if (eat('+')) l = bin('op', '+', l, mul());
+      else if (eat('-')) l = bin('op', '-', l, mul());
+      else return l;
+    }
+  }
+  function mul() {
+    let l = fac();
+    for (;;) {
+      if (eat('*')) l = bin('op', '*', l, fac());
+      else if (eat('/')) l = bin('op', '/', l, fac());
+      else return l;
+    }
+  }
+  function fac() {
+    if (eat('+')) return fac();
+    if (eat('-')) return { t: 'neg', a: fac() };
+    let n = prim();
+    if (eat('^')) n = bin('op', '^', n, fac());
+    sp();
+    const u = /^(deg|rad)/.exec(src.slice(p));
+    if (u) { p += 3; n = { t: 'unit', u: u[1], a: n }; }
+    return n;
+  }
+  function prim() {
+    sp();
+    const c = src[p];
+    if (c === '(') { p++; const e = or(); if (!eat(')')) err("Missing ')'"); return e; }
+    let m = /^(\d+\.?\d*|\.\d+)/.exec(src.slice(p));
+    if (m) { p += m[0].length; return { t: 'num', v: +m[0] }; }
+    m = /^[A-Za-z][A-Za-z0-9]*/.exec(src.slice(p));
+    if (!m) err('Unexpected ' + (c ? "'" + c + "'" : 'end of text'));
+    const name = m[0];
+    p += name.length;
+    if (peek() === '(') {
+      p++;
+      const a = [];
+      if (!eat(')')) {
+        do { a.push(or()); } while (eat(','));
+        if (!eat(')')) err("Missing ')' or ','");
+      }
+      const f = FN[name];
+      if (!f) err('Unknown function ' + name);
+      if (!f.c.includes(a.length)) err(name + ' takes ' + f.c.join(' or ') + ' args, got ' + a.length);
+      return { t: 'fn', n: name, a };
+    }
+    if (name in CONSTS) return { t: 'const', n: name };
+    if (name in KW) return { t: 'kw', n: name };
+    if (/^[a-z]+$/.test(name)) return { t: 'var', n: name };
+    err('Unknown name ' + name);
+  }
+  const e = or();
+  sp();
+  if (p < src.length) err("Unexpected '" + src[p] + "'");
+  return e;
+}
+
+// one field of the text -> tree (or null when empty)
+function toTree(part, mode) {
+  const s = part.trim();
+  if (s === '' || s === 'd') return null;
+  if (s[0] === '!') return parseExpr(s.slice(1));
+  if (s.startsWith('#!')) return parseExpr(s.slice(2));
+  const num = v => ({ t: 'num', v });
+  if (mode === 'pos') {
+    if (s === 'w' || s === 'h') return { t: 'const', n: s };
+    if (/^-?\d+$/.test(s)) return +s < 0 ? { t: 'neg', a: num(-s) } : num(+s);
+  } else {
+    let m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s);
+    if (m) {
+      let h = m[1];
+      if (h.length === 3) h = h.replace(/./g, '$&$&');
+      return { t: 'fn', n: 'rgb', a: [0, 2, 4].map(i => num(parseInt(h.substr(i, 2), 16))) };
+    }
+    m = /^(\d+)\s*,\s*(\d+)\s*,\s*(\d+)$/.exec(s);
+    if (m) return { t: 'fn', n: 'rgb', a: [1, 2, 3].map(i => num(+m[i])) };
+  }
+  throw new Error(mode === 'pos'
+    ? "'" + s + "' is not a math expression. Expressions must start with '!', except for the standalone constants d, w and h."
+    : "'" + s + "' is not a color. Use R, G, B, #RRGGBB, #RGB or a math expression starting with '!'.");
+}
+
+/* ---------- workspace ---------- */
+let mode = 'pos';
+const saved = {};
+const W = Blockly.inject('ws', {
+  toolbox,
+  theme: Blockly.Themes.Classic,
+  renderer: 'geras',
+  trashcan: true,
+  grid: { spacing: 20, length: 3, colour: '#ddd', snap: true },
+  zoom: { controls: true, wheel: true, startScale: 0.9, minScale: 0.4 },
+  move: { scrollbars: true, drag: true, wheel: true }
+});
+window.addEventListener('resize', () => Blockly.svgResize(W));
+
+// tree -> Blockly JSON (loaded through the serializer so every block gets rendered)
+function toJson(n) {
+  const bl = (type, fields, inputs, extra) => {
+    const o = { type };
+    if (fields) o.fields = fields;
+    if (inputs) { o.inputs = {}; for (const k in inputs) o.inputs[k] = { block: inputs[k] }; }
+    if (extra) o.extraState = extra;
+    return o;
+  };
+  switch (n.t) {
+    case 'num': return bl('num', { V: n.v });
+    case 'const': case 'kw': case 'var': return bl(n.t, { N: n.n });
+    case 'neg': return bl('neg', null, { A: toJson(n.a) });
+    case 'unit': return bl('unit', { U: n.u }, { A: toJson(n.a) });
+    case 'op': case 'cmp': case 'logic': return bl(n.t, { OP: n.o }, { A: toJson(n.a), B: toJson(n.b) });
+    default: {
+      const inputs = {};
+      n.a.forEach((x, i) => inputs['A' + i] = toJson(x));
+      return bl('f_' + n.n, null, inputs, { n: n.a.length });
+    }
+  }
+}
+
+// rebuild the workspace with the given trees (null = empty root)
+function fill(trees) {
+  Blockly.Events.disable();
+  try {
+    W.clear();
+    const blocks = ROOTS[mode].map((type, i) => {
+      const o = { type, x: 20, y: 20 + i * 200 };
+      if (trees[i]) o.inputs = { E: { block: toJson(trees[i]) } };
+      return o;
+    });
+    Blockly.serialization.workspaces.load({ blocks: { languageVersion: 0, blocks } }, W);
+  } finally {
+    Blockly.Events.enable();
+  }
+  layoutRoots();
+  refresh();
+}
+
+// Root blocks are locked in a column at a fixed X and pushed apart as the ones above grow or shrink,
+// so a tall X expression never overlaps the Y block underneath it.
+const ROOT_X = 20, ROOT_TOP = 20, ROOT_GAP = 24;
+function layoutRoots() {
+  const order = type => ROOTS[mode].indexOf(type);
+  const roots = W.getTopBlocks(false).filter(b => order(b.type) !== -1)
+    .sort((a, b) => order(a.type) - order(b.type));
+  Blockly.Events.disable();
+  try {
+    let y = ROOT_TOP;
+    for (const b of roots) {
+      b.render(); // refresh the cached size first: after a block is pulled out the old height can still be cached
+      // Blockly 11's moveTo() wants a Coordinate, so move by deltas instead
+      const p = b.getRelativeToSurfaceXY();
+      b.moveBy(ROOT_X - p.x, y - p.y);
+      y += b.getHeightWidth().height + ROOT_GAP;
+    }
+  } finally {
+    Blockly.Events.enable();
+  }
+}
+
+function refresh() {
+  const tops = W.getTopBlocks(false);
+  // a field that holds just one of the bare constants is a plain value: '!' is optional there
+  const BARE = ['d', 'w', 'h'];
+  const val = type => {
+    const r = tops.find(b => b.type === type), c = r && r.getInputTargetBlock('E');
+    if (!c) return '';
+    const bare = mode === 'pos' && c.type === 'const' && BARE.includes(c.getFieldValue('N'));
+    return (bare ? '' : '!') + wrap(gen(c), 4);
+  };
+  const v = mode === 'pos' ? ROOTS.pos.map(t => val(t)) : [val('root_c')];
+  $('out').value = v.some(x => x) ? (mode === 'pos' ? v.map(x => x || 'd').join(';') : v[0]) : '';
+  $('out').classList.remove('is-invalid');
+}
+
+function applyText() {
+  try {
+    const txt = $('out').value.trim();
+    const parts = mode === 'pos' ? txt.split(';') : [txt];
+    if (parts.length > 4) throw new Error('Position / size has at most 4 parts: x;y;width;height.');
+    fill(parts.map(p => toTree(p, mode)));
+  } catch (e) {
+    $('err').textContent = e.message;
+    $('out').classList.add('is-invalid');
+  }
+}
+
+let sel = null; // currently selected block
+const show = b => { $('info').textContent = b && b.d ? b.d() : DEF_INFO; };
+W.addChangeListener(e => {
+  if (e.type === 'selected') {
+    sel = e.newElementId ? W.getBlockById(e.newElementId) : null;
+    show(sel);
+    return;
+  }
+  if (!e.isUiEvent) { refresh(); layoutRoots(); }
+});
+
+// hovering a block in the open toolbox flyout shows its info; moving away shows the selected block again.
+// the deepest match wins, so the small shadow values (the 0 in sin(0)) describe themselves instead of their parent.
+function flyoutBlockAt(target) {
+  const fly = W.getFlyout && W.getFlyout();
+  if (!fly || !fly.isVisible()) return null;
+  let found = null, depth = -1;
+  for (const b of fly.getWorkspace().getAllBlocks(false)) {
+    const root = b.getSvgRoot && b.getSvgRoot();
+    if (!root || !root.contains(target)) continue;
+    let d = 0;
+    for (let p = b.getParent(); p; p = p.getParent()) d++;
+    if (d > depth) { found = b; depth = d; }
+  }
+  return found;
+}
+$('ws').addEventListener('mouseover', e => show(flyoutBlockAt(e.target) || sel));
+$('ws').addEventListener('mouseleave', () => show(sel));
+// after any drag/drop, re-flow the locked roots even if no change event reached us
+$('ws').addEventListener('pointerup', () => setTimeout(() => { refresh(); layoutRoots(); }, 0));
+
+document.querySelectorAll('[name=mode]').forEach(r => r.addEventListener('change', () => {
+  if (!r.checked) return;
+  saved[mode] = Blockly.serialization.workspaces.save(W);
+  mode = r.value;
+  if (saved[mode]) {
+    Blockly.Events.disable();
+    W.clear();
+    Blockly.serialization.workspaces.load(saved[mode], W);
+    Blockly.Events.enable();
+    layoutRoots();
+    refresh();
+  } else {
+    fill([]);
+  }
+}));
+
+$('apply').addEventListener('click', applyText);
+$('out').addEventListener('keydown', e => { if (e.key === 'Enter') applyText(); });
+$('tidy').addEventListener('click', () => { W.cleanUp(); layoutRoots(); });
+$('copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('out').value); } catch (e) { $('out').select(); document.execCommand('copy'); }
+  $('copy').textContent = 'Copied';
+  setTimeout(() => $('copy').textContent = 'Copy', 1200);
+});
+
+/* ---------- examples browser ---------- */
+const EXAMPLE_SETS = {
+  pos: [
+    { name: 'Reset', expr: 'd;d;d;d', desc: 'Put the selected control back in its original place and size.' },
+    { name: 'Nudge right', expr: '!dcx+10;d;d;d', desc: 'Move 10 px right of the original left edge.' },
+    { name: 'Diagonal nudge', expr: '!dcx+10;!dcy+10;d;d', desc: 'Shift 10 px right and 10 px down.' },
+    { name: 'Bottom-right corner', expr: '!w-dcw-10;!h-dch-10;d;d', desc: 'Pin the control 10 px from the right and bottom edges.' },
+    { name: 'Center', expr: '!centerx;!centery;d;d', desc: 'Center the control in the window without changing its size.' },
+    { name: 'Center horizontally', expr: '!centerx;d;d;d', desc: 'Center along X only; keep the original Y.' },
+    { name: 'Center vertically', expr: 'd;!centery;d;d', desc: 'Center along Y only; keep the original X.' },
+    { name: 'Top-left corner', expr: '!0;!0;d;d', desc: 'Snap to the top-left corner of the client area.' },
+    { name: 'Top-right corner', expr: '!w-dcw;!0;d;d', desc: 'Snap to the top-right corner of the client area.' },
+    { name: 'Bottom-left corner', expr: '!0;!h-dch;d;d', desc: 'Snap to the bottom-left corner of the client area.' },
+    { name: 'Double width', expr: '!clamp(dcx,0,w-min(dcw*2,w));!dcy;!min(dcw*2,w);d', desc: 'Double the width (up to the window edge) and keep the whole control inside the window.' },
+    { name: 'Double size', expr: '!clamp(dcx,0,w-min(dcw*2,w));!clamp(dcy,0,h-min(dch*2,h));!min(dcw*2,w);!min(dch*2,h)', desc: 'Double both width and height (up to the window edges) and keep the whole control inside the window.' },
+    { name: 'Full width', expr: '!0;!dcy;!w;d', desc: 'Stretch across the whole client width and keep Y and height.' },
+    { name: 'Full height', expr: '!dcx;!0;d;!h', desc: 'Stretch from the top to the bottom and keep X and width.' },
+    { name: 'Margins', expr: '!10;!dcy;!w-20;d', desc: 'Keep 10 px margins on the left and right, with the original Y.' },
+    { name: 'Left of OK button', expr: '!steal(OkButton,x)-dcw-8;!steal(OkButton,y);d;d', desc: 'Sit 8 px left of the OK button, aligned with its top. Select another control to see the move.' },
+    { name: 'Flicker on hover', expr: '!dyn(if(mouseincontrol, shift(dcx, dcx-1000, 0), dcx), 16);d;d;d', desc: 'Hover the control: a step of 0 makes shift() flip between the original X and 1000 px to the left on every update. This is the flicker effect.' },
+    { name: 'Slide loop', expr: '!dyn(shift(0,w-dcw,1,loop),16);d;d;d', desc: 'Slide from the left edge to the right edge and back, one pixel at a time.' },
+    { name: 'Bounce', expr: '!dyn(shift2(0,w-dcw,4),16);d;d;d', desc: 'Bounce across the window; shift2 stops exactly at the right edge.' },
+    { name: 'DVD bounce', expr: '!dyn(shift(0,w-dcw,6,loop),16);!dyn(shift(0,h-dch,3,loop),16);d;d', desc: 'Bounce horizontally and vertically at different speeds, like a DVD logo.' },
+    { name: 'Orbit center', expr: '!dyn(centerx+cos(time/400)*80,16);!dyn(centery+sin(time/400)*60,16);d;d', desc: 'Circle around the window center on an ellipse.' },
+    { name: 'Shake', expr: '!dyn(dcx+sin(time/60)*4,16);!dyn(dcy+cos(time/60)*4,16);d;d', desc: 'A fast 4 px shake around the original position.' },
+    { name: 'Glitch jitter', expr: '!dyn(dcx+irnd(-3,3),50);!dyn(dcy+irnd(-3,3),50);d;d', desc: 'Jump to a random nearby offset 20 times per second.' },
+    { name: 'Resize with mouse', expr: '!d;!d;!map(mouserelx,0,w,80,300);!map(mouserely,0,h,16,80)', desc: 'Width follows mouse X (80-300 px); height follows mouse Y (16-80 px).' },
+    { name: 'Follow mouse', expr: '!clamp(mouserelx-dcw/2,0,max(0,w-dcw));!clamp(mouserely-dch/2,0,max(0,h-dch));d;d', desc: 'Keep the control under the pointer, clamped inside the window.' },
+    { name: 'Pulse to center', expr: '!dyn(lerp(dcx,centerx,abs(sin(time/600))),16);d;d;d', desc: 'Glide toward the center and back, over and over.' },
+    { name: 'March right', expr: '!dyn(shift2(dcx,dcx+40,2,forward),16);d;d;d', desc: 'Creep 40 px to the right in 2 px steps, then jump back.' },
+    { name: 'Hover snap', expr: '!dyn(if(mouseincontrol, w-dcw-6, dcx),30);d;d;d', desc: 'Jump to the right edge while hovered, then return on leave.' },
+    { name: 'Breathing width', expr: '!d;!d;!dyn(dcw+sin(time/180)*12,16);d', desc: 'Let the width gently grow and shrink by 12 px.' },
+    { name: 'Move onto OK button', expr: '!steal(OkButton,x);!steal(OkButton,y);d;d', desc: 'Move to the OK button top-left corner and keep the original size. Select another control to see the move.' }
+  ],
+  col: [
+    { name: 'Hex accent', expr: '#0078D7', desc: 'The Windows accent blue written as a compact hex color.' },
+    { name: 'RGB orange', expr: '255,140,0', desc: 'Orange written directly as red, green and blue values.' },
+    { name: 'Accent constant', expr: '!accent', desc: 'Use the current Windows accent color.' },
+    { name: 'Bold red', expr: '!rgb(220,40,40)', desc: 'A strong red from RGB values.' },
+    { name: 'Fresh green', expr: '!rgb(20,160,90)', desc: 'A clean green from RGB values.' },
+    { name: 'Sky blue', expr: '!hsv(210,70,90)', desc: 'A calm blue made with HSV.' },
+    { name: 'Warm red', expr: '!hsv(0,80,95)', desc: 'A warm red with high brightness.' },
+    { name: 'Purple', expr: '!hsv(280,55,85)', desc: 'A soft purple made with HSV.' },
+    { name: 'Soft orange', expr: '!oklch(70,50,30)', desc: 'An orange mixed in OKLCH, which keeps brightness smooth.' },
+    { name: 'Indigo', expr: '!oklch(60,45,260)', desc: 'A deep indigo in OKLCH.' },
+    { name: 'Lighten accent', expr: '!lighten(accent,25)', desc: 'Make the accent color 25% lighter.' },
+    { name: 'Darken accent', expr: '!darken(accent,20)', desc: 'Make the accent color 20% darker.' },
+    { name: 'Invert accent', expr: '!invert(accent)', desc: 'The opposite of the accent color.' },
+    { name: 'Gray accent', expr: '!gray(accent)', desc: 'Remove the color but keep the brightness.' },
+    { name: 'Readable contrast', expr: '!contrast(accent)', desc: 'Black or white, whichever is easier to read on the accent color.' },
+    { name: 'Pink-blue blend', expr: '!mix(rgb(255,0,80),rgb(0,90,255),0.5)', desc: 'Blend pink and blue halfway for a violet color.' },
+    { name: 'Mouse gradient', expr: '!mix(accent,rgb(255,0,128),clamp(mouserelx/w,0,1))', desc: 'Blend from accent to pink based on the pointer X position.' },
+    { name: 'Rainbow', expr: '!dyn(oklch(70,50,mod(time/20,360)),30)', desc: 'Slowly cycle the hue of a smooth OKLCH rainbow.' },
+    { name: 'Fast rainbow', expr: '!dyn(hsv(mod(time/15,360),70,100),30)', desc: 'A faster HSV rainbow.' },
+    { name: 'Stepped color wheel', expr: '!dyn(hsv(shift(0,360,3,loop),70,100),60)', desc: 'Use shift() to walk the hue in 3 degree steps.' },
+    { name: 'Breathing blue', expr: '!dyn(mix(rgb(0,120,212),rgb(0,220,255),abs(mod(time,1200)/600-1)),30)', desc: 'Pulse smoothly between two shades of blue.' },
+    { name: 'Hover red', expr: '!dyn(if(mouseincontrol, rgb(255,80,80), accent),50)', desc: 'Turn red while the pointer is over the control.' },
+    { name: 'Focus green', expr: '!dyn(if(focused, rgb(0,170,90), rgb(128,128,128)),50)', desc: 'Green while the preview window has focus, gray otherwise.' },
+    { name: 'Light by mouse Y', expr: '!dyn(lighten(accent, map(mouserely,0,h,0,50)),30)', desc: 'Lighten the accent as the pointer moves down.' },
+    { name: 'Dark rainbow', expr: '!dyn(darken(oklch(70,50,mod(time/20,360)),10),30)', desc: 'A darker rainbow that cycles over time.' },
+    { name: 'Brightness by mouse X', expr: '!dyn(hsv(210,70,map(mouserelx,0,w,40,100)),30)', desc: 'Let mouse X drive the brightness of a blue HSV color.' },
+    { name: 'Orange pulse', expr: '!dyn(rgb(255, shift(0,255,10,loop), 0),60)', desc: 'Ramp the green channel from 0 to 255 and back for an orange to yellow pulse.' },
+    { name: 'Gray fade', expr: '!dyn(mix(rgb(0,0,0),rgb(255,255,255),abs(mod(time,2000)/1000-1)),30)', desc: 'Fade smoothly from black to white and back.' },
+    { name: 'Accent pastel', expr: '!mix(accent,rgb(255,255,255),0.65)', desc: 'Mix the accent with white for a pastel tint.' },
+    { name: 'Neon accent', expr: '!mix(accent,rgb(255,0,128),0.4)', desc: 'Mix the accent with hot pink for a neon tint.' }
+  ]
+};
+
+const EX_MODE = {
+  pos: { radio: 'm-pos', pane: 'ex-pane-pos' },
+  col: { radio: 'm-col', pane: 'ex-pane-col' }
+};
+
+function showExamplesForMode() {
+  const kind = $('m-col').checked ? 'col' : 'pos';
+  $('ex-pane-pos').hidden = kind !== 'pos';
+  $('ex-pane-col').hidden = kind !== 'col';
+  const badge = $('ex-kind-badge');
+  badge.textContent = kind === 'col' ? 'Color' : 'Position / size';
+  badge.className = 'badge rounded-pill ' + (kind === 'col' ? 'text-bg-info' : 'text-bg-primary');
+}
+
+function parseExampleExpr(expr, kind) {
+  try {
+    if (kind === 'col') {
+      const tree = toTree(expr, 'col');
+      return { ok: true, payload: { mode: 'col', pos: null, col: tree ? toJson(tree) : null } };
+    }
+    const parts = expr.split(';');
+    if (parts.length > 4) throw new Error('Position / size has at most 4 parts: x;y;width;height.');
+    const pos = parts.map(p => {
+      const tree = toTree(p, 'pos');
+      return tree ? toJson(tree) : null;
+    });
+    while (pos.length < 4) pos.push(null);
+    return { ok: true, payload: { mode: 'pos', pos, col: null } };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
+}
+
+function applyExample(expr, kind) {
+  const radio = $(EX_MODE[kind].radio);
+  if (!radio.checked) radio.click();
+  $('err').textContent = '';
+  $('out').value = expr;
+  $('apply').click();
+  const ok = !$('out').classList.contains('is-invalid');
+  return { ok, message: ok ? '' : ($('err').textContent || 'Could not apply this expression.') };
+}
+
+function buildExampleRow(kind, ex) {
+  const row = document.createElement('div');
+  row.className = 'ex-row';
+
+  const line = document.createElement('div');
+  line.className = 'd-flex flex-wrap gap-2 align-items-center';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'form-control form-control-sm font-monospace ex-expr flex-grow-1';
+  input.value = ex.expr;
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  input.setAttribute('aria-label', ex.name + ' expression');
+
+  const applyBtn = document.createElement('button');
+  applyBtn.type = 'button';
+  applyBtn.className = 'btn btn-sm btn-primary ex-apply';
+  applyBtn.textContent = 'Apply';
+
+  const simBtn = document.createElement('button');
+  simBtn.type = 'button';
+  simBtn.className = 'btn btn-sm btn-outline-success ex-sim';
+  simBtn.textContent = 'Simulate';
+
+  line.append(input, applyBtn, simBtn);
+
+  const desc = document.createElement('div');
+  desc.className = 'ex-desc';
+  const name = document.createElement('strong');
+  name.textContent = ex.name + '.';
+  desc.append(name, document.createTextNode(' ' + ex.desc));
+
+  const error = document.createElement('div');
+  error.className = 'ex-err text-danger';
+  error.style.fontSize = '.75rem';
+  error.hidden = true;
+
+  const feedback = res => {
+    input.classList.toggle('is-invalid', !res.ok);
+    error.hidden = res.ok;
+    error.textContent = res.ok ? '' : res.message;
+  };
+
+  applyBtn.addEventListener('click', () => {
+    const res = applyExample(input.value, kind);
+    feedback(res);
+    clearTimeout(applyBtn._t);
+    applyBtn.textContent = res.ok ? 'Applied' : 'Error';
+    applyBtn.classList.toggle('btn-success', res.ok);
+    applyBtn.classList.toggle('btn-primary', !res.ok);
+    applyBtn._t = setTimeout(() => {
+      applyBtn.textContent = 'Apply';
+      applyBtn.classList.add('btn-primary');
+      applyBtn.classList.remove('btn-success');
+    }, 1200);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyBtn.click();
+    }
+  });
+
+  simBtn.addEventListener('click', () => {
+    const res = parseExampleExpr(input.value, kind);
+    feedback(res);
+    if (!res.ok) return;
+    if (typeof window.simulateExampleExpression !== 'function') {
+      feedback({ ok: false, message: 'The simulator is not ready yet.' });
+      return;
+    }
+    window.simulateExampleExpression(res.payload);
+  });
+
+  row.append(line, desc, error);
+  return row;
+}
+
+for (const kind of ['pos', 'col']) {
+  const pane = $(EX_MODE[kind].pane);
+  const frag = document.createDocumentFragment();
+  for (const ex of EXAMPLE_SETS[kind]) frag.appendChild(buildExampleRow(kind, ex));
+  pane.appendChild(frag);
+}
+
+let exModal = null;
+const exModalEl = $('exModal');
+
+$('examples').addEventListener('click', () => {
+  showExamplesForMode();
+  if (!exModal) exModal = new bootstrap.Modal(exModalEl);
+  exModal.show();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !exModalEl.classList.contains('show')) return;
+  if ($('simModal').classList.contains('show')) return;  // the preview handles its own Escape
+  exModal.hide();
+});
+
+const simModalEl = $('simModal');
+simModalEl.addEventListener('show.bs.modal', () => {
+  // Keep the examples dialog underneath and give the preview its own, higher backdrop.
+  document.body.classList.toggle('sim-stacked', exModalEl.classList.contains('show'));
+});
+simModalEl.addEventListener('shown.bs.modal', () => {
+  if (!document.body.classList.contains('sim-stacked')) return;
+  const backdrops = [...document.querySelectorAll('.modal-backdrop')];
+  backdrops.forEach((b, i) => {
+    b.style.zIndex = i === backdrops.length - 1 ? '1060' : '1050';
+  });
+});
+simModalEl.addEventListener('hidden.bs.modal', () => {
+  document.body.classList.remove('sim-stacked');
+  for (const b of document.querySelectorAll('.modal-backdrop')) b.style.zIndex = '';
+  // Closing the stacked preview must not unlock scrolling behind the examples dialog.
+  if (exModalEl.classList.contains('show')) document.body.classList.add('modal-open');
+});
+
+$('info').textContent = DEF_INFO;
+fill([]);
+</script>
+
+<script>
+/* ---------- simulator (kept separate from the builder) ---------- */
+(() => {
+  'use strict';
+
+  const $id = id => document.getElementById(id);
+  const TB = 30;
+  const TARGETS = ['text', 'fill', 'textoutline'];
+  const DEFAULT_TEXT_COLOR = '#000000';
+  const ACCENT = 0x0078D7;
+
+  const DEFS = [
+    { id: 'OkButton',      x: 375, y: 358, w: 75,  h: 23, text: 'OK' },
+    { id: 'RegisteredUser2', x: 68, y: 311, w: 315, h: 16, text: '' },
+    { id: 'LicenseInfo',   x: 53, y: 262, w: 315, h: 33, text: 'This product is licensed under the Microsoft Software License Terms to:' },
+    { id: 'LegalNotice',   x: 53, y: 165, w: 360, h: 65, text: 'The Windows 11 Pro operating system and its user interface are protected by trademark and other pending or existing intellectual property rights in the United States and other countries/regions.' },
+    { id: 'ProductName',   x: 53, y: 100, w: 345, h: 16, text: 'Microsoft Windows' },
+    { id: 'Spacer1',       x: 53, y: 148, w: 360, h: 16, text: '' },
+    { id: 'RegisteredUser1', x: 68, y: 295, w: 315, h: 16, text: 'Tautvydas' },
+    { id: 'Version',       x: 53, y: 116, w: 398, h: 16, text: 'Version 23H2 (OS Build 22631.6199)' },
+    { id: 'Spacer2',       x: 53, y: 230, w: 315, h: 33, text: '' },
+    { id: 'Separator',     x: 15, y: 83,  w: 426, h: 2,  text: '' },
+    { id: 'Copyright',     x: 53, y: 132, w: 360, h: 16, text: '\u00A9 Microsoft Corporation. All rights reserved.' },
+    { id: 'LeftIcon',      x: 11, y: 100, w: 32,  h: 33, text: '' }
+  ];
+  const BY_ID = Object.fromEntries(DEFS.map(d => [d.id, d]));
+  const texts = Object.fromEntries(DEFS.map(d => [d.id, d.text]));
+
+  /* Display order used by the Control picker. */
+  const CONTROL_ORDER = [
+    ['LeftIcon', 'Flag icon'],
+    ['Separator', 'Separator'],
+    ['ProductName', 'Product name'],
+    ['Version', 'Version'],
+    ['Copyright', 'Copyright'],
+    ['Spacer1', 'Spacer 1'],
+    ['LegalNotice', 'Legal notice'],
+    ['Spacer2', 'Spacer 2'],
+    ['LicenseInfo', 'License info'],
+    ['RegisteredUser1', 'Registered user 1'],
+    ['RegisteredUser2', 'Registered user 2'],
+    ['OkButton', 'Ok button']
+  ];
+
+  const stage = $id('sim-playground');
+  const win = $id('sim-win');
+  const titlebar = $id('sim-titlebar');
+  const client = $id('sim-client');
+
+  /* Every control is rendered at once; only the selected one takes the expression. */
+  const controls = {};
+  for (const d of DEFS) {
+    const el = document.createElement('div');
+    el.className = 'sim-ctrl' + (d.id === 'OkButton' ? ' ok' : d.id === 'Separator' ? ' sep' : '');
+    el.dataset.id = d.id;
+    el.style.left = d.x + 'px';
+    el.style.top = d.y + 'px';
+    el.style.width = d.w + 'px';
+    el.style.height = d.h + 'px';
+    const textEl = document.createElement('div');
+    textEl.className = 'sim-ctrl-text';
+    el.appendChild(textEl);
+    const guide = document.createElement('div');
+    guide.className = 'sim-ctrl-guide';
+    guide.hidden = true;
+    el.appendChild(guide);
+    client.appendChild(el);
+    controls[d.id] = { el, text: textEl, guide };
+  }
+  const LICENSE_PHRASE = 'Microsoft Software License Terms';
+  const escHTML = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+  const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+  const lround = v => (v < 0 ? -Math.round(-v) : Math.round(v));
+  const rint = v => {
+    const f = Math.floor(v), d = v - f;
+    if (d < 0.5) return f;
+    if (d > 0.5) return f + 1;
+    return f % 2 === 0 ? f : f + 1;
+  };
+  const cMod = (a, b) => {
+    let x = a % b;
+    if (x < 0) x += Math.abs(b);
+    return x;
+  };
+
+  class SimError extends Error {}
+  const fail = msg => { throw new SimError(msg); };
+
+  /* ---------- colour maths (same formulas as the mod) ---------- */
+  function srgbToLinear(v) {
+    v /= 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+  function linearToSrgb(v) {
+    v = clamp(v, 0, 1);
+    return v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+  }
+  function oklabMake(color) {
+    color = ((color % 0x1000000) + 0x1000000) % 0x1000000;
+    const lin = [(color >> 16) & 255, (color >> 8) & 255, color & 255].map(srgbToLinear);
+    const l = Math.cbrt(0.4122214708 * lin[0] + 0.5363325363 * lin[1] + 0.0514459929 * lin[2]);
+    const m = Math.cbrt(0.2119034982 * lin[0] + 0.6806995451 * lin[1] + 0.1073969566 * lin[2]);
+    const s = Math.cbrt(0.0883024619 * lin[0] + 0.2817188376 * lin[1] + 0.6299787005 * lin[2]);
+    return {
+      L: 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+      a: 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+      b: 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+    };
+  }
+  function oklabColor(lab) {
+    const l = Math.pow(lab.L + 0.3963377774 * lab.a + 0.2158037573 * lab.b, 3);
+    const m = Math.pow(lab.L - 0.1055613458 * lab.a - 0.0638541728 * lab.b, 3);
+    const s = Math.pow(lab.L - 0.0894841775 * lab.a - 1.2914855480 * lab.b, 3);
+    const lin = [
+      4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    ];
+    let result = 0;
+    for (let i = 0; i < 3; i++) {
+      const v = Math.round(clamp(linearToSrgb(lin[i]), 0, 1) * 255);
+      result |= v << (16 - i * 8);
+    }
+    return result >>> 0;
+  }
+  const cssColor = n => '#' + (n & 0xFFFFFF).toString(16).padStart(6, '0');
+
+  /* ---------- evaluator over the Blockly JSON ---------- */
+  function child(b, name) {
+    return (b && b.inputs && b.inputs[name] && b.inputs[name].block) || null;
+  }
+  function argCount(b) {
+    if (b && b.extraState && Number.isInteger(b.extraState.n)) return b.extraState.n;
+    let n = 0;
+    while (b && b.inputs && b.inputs['A' + n]) n++;
+    return n;
+  }
+  function numOf(v) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) fail('expected a number');
+    return v;
+  }
+  function inRect(px, py, r) {
+    return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h;
+  }
+  function rectOf(name) {
+    if (name === sel) return { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    const d = BY_ID[name];
+    if (!d) fail(`unknown control '${name}'`);
+    return { x: d.x, y: d.y, w: d.w, h: d.h };
+  }
+
+  function constant(name, ctx) {
+    switch (name) {
+      case 'w': return winW;
+      case 'h': return winH;
+      case 'd':
+        if (ctx.field === null) fail("'d' can only be used in position / size");
+        return [def.x, def.y, def.w, def.h][ctx.field];
+      case 'cx': return ctx.snap.x;
+      case 'cy': return ctx.snap.y;
+      case 'cw': return ctx.snap.w;
+      case 'ch': return ctx.snap.h;
+      case 'dcx': return def.x;
+      case 'dcy': return def.y;
+      case 'dcw': return def.w;
+      case 'dch': return def.h;
+      case 'centerx': return winW / 2 - ctx.snap.w / 2;
+      case 'centery': return winH / 2 - ctx.snap.h / 2;
+      case 'pi': return Math.PI;
+      case 'e': return Math.E;
+      case 'focused': return simFocused ? 1 : 0;
+      case 'mousex': return mouse.x;
+      case 'mousey': return mouse.y;
+      case 'mouserelx': return mouse.x - winX;
+      case 'mouserely': return mouse.y - winY;
+      case 'mouseinwindow': return inRect(mouse.x - winX, mouse.y - winY, { x: 0, y: 0, w: winW, h: winH }) ? 1 : 0;
+      case 'mouseincontrol': return inRect(mouse.x - winX, mouse.y - winY, ctx.snap) ? 1 : 0;
+      case 'time': return performance.now() - simStart;
+      case 'accent': return ACCENT;
+      case 'darkmode': return 0;
+    }
+    return fail(`unknown constant '${name}'`);
+  }
+
+  function readColor(fn, v) {
+    const n = numOf(v);
+    if (n < 0 || n > 16777215) fail(`${fn}(): ${n} is not a valid colour (must be 0 - 16777215)`);
+    return lround(n);
+  }
+
+  function shiftValue(name, args, ctx) {
+    if (args.length < 2 || args.length > 6) fail(`${name}() must be 2 to 6 args`);
+    if (!ctx.inDyn) fail(`${name}() must be inside dyn()`);
+    const sec = ctx.sec;
+    const idx = ctx.callIndex++;
+    while (sec.calls.length <= idx) sec.calls.push(null);
+    let st = sec.calls[idx];
+    if (!st) st = sec.calls[idx] = { init: false, p: 0, skipLeft: 0, swapLogged: false };
+
+    let start = numOf(args[0]);
+    let end = numOf(args[1]);
+    let step = args.length > 2 ? numOf(args[2]) : 0;
+    let mode = args.length > 3 ? args[3] : 'forward';
+    if (mode === 'forward') mode = 1;
+    else if (mode === 'loop') mode = 0;
+    else mode = numOf(mode);
+    const skip = args.length > 4 ? numOf(args[4]) : 0;
+    const init = args.length > 5 ? numOf(args[5]) : 0;
+
+    if (mode !== 0 && mode !== 1) fail(`${name}(): mode must be 'forward' or 'loop'`);
+    if (![start, end, step, skip, init].every(Number.isFinite)) fail(`${name}(): arguments must be finite numbers`);
+    if (skip < 0 || init < 0) fail(`${name}(): skip times must be 0 or higher`);
+
+    if (!st.init) {
+      st.init = true;
+      st.p = 0;
+      st.skipLeft = lround(init);
+    } else if (ctx.tick) {
+      if (st.skipLeft > 0) st.skipLeft--;
+      else {
+        st.p++;
+        st.skipLeft = lround(skip);
+      }
+    }
+
+    if (step === 0) return st.p % 2 === 0 ? start : end;
+
+    if (start > end) {
+      [start, end] = [end, start];
+      step = -step;
+    }
+    if (end - start === 0) return start;
+    const absStep = Math.abs(step);
+    let stepCount = Math.ceil((end - start) / absStep - 1e-9);
+    if (stepCount < 1) stepCount = 1;
+    if (stepCount > 1e9) fail(`${name}(): step is too small for this range`);
+    const stepCountL = Math.trunc(stepCount);
+    let stepIdx;
+    if (mode === 1) {
+      stepIdx = st.p % (stepCountL + 1);
+    } else {
+      const q = st.p % (2 * stepCountL);
+      stepIdx = q <= stepCountL ? q : 2 * stepCountL - q;
+    }
+    if (step < 0) stepIdx = stepCountL - stepIdx;
+    let v = start + stepIdx * absStep;
+    if (name === 'shift2' && v > end) v = end;
+    return v;
+  }
+
+  function evalFn(name, b, ctx) {
+    const n = argCount(b);
+
+    if (name === 'dyn') {
+      if (ctx.seen) fail('only one dyn() per section is allowed');
+      ctx.seen = true;
+      const saved = ctx.inDyn;
+      ctx.inDyn = saved + 1;
+      try {
+        const value = numOf(evalBlock(child(b, 'A0'), ctx));
+        let t = n > 1 ? numOf(evalBlock(child(b, 'A1'), ctx)) : 10;
+        if (!Number.isFinite(t) || t <= 0) fail('dyn(): update time must be higher than 0');
+        if (ctx.reg || ctx.tick) {
+          t = Math.min(Math.max(t, 10), 3600000);
+          ctx.delay = lround(t);
+        }
+        return value;
+      } finally {
+        ctx.inDyn = saved;
+      }
+    }
+
+    const args = [];
+    for (let i = 0; i < n; i++) args.push(evalBlock(child(b, 'A' + i), ctx));
+    const a = i => numOf(args[i]);
+
+    switch (name) {
+      case 'if': return a(0) !== 0 ? a(1) : a(2);
+      case 'replace':
+      case 'replace2': {
+        if (args.length < 3 || args.length % 2 === 0) fail(`${name}(): min 3 args and pairs after the value`);
+        let x = a(0);
+        for (let i = 1; i < args.length; i += 2) {
+          if (x === a(i)) {
+            x = a(i + 1);
+            if (name === 'replace2') break;
+          }
+        }
+        return x;
+      }
+      case 'shift':
+      case 'shift2': return shiftValue(name, args, ctx);
+      case 'steal': {
+        if (args.length !== 2) fail('steal() requires 2 args');
+        const target = args[0], attr = args[1];
+        if (typeof target !== 'string' || !BY_ID[target]) fail(`steal(): unknown control '${target}'`);
+        if (attr !== 'x' && attr !== 'y' && attr !== 'w' && attr !== 'h') fail('steal(): attribute must be x, y, w or h');
+        const r = rectOf(target);
+        return r[attr];
+      }
+      case 'controltch':
+      case 'controlin': {
+        if (args.length !== 2) fail(`${name}() requires 2 args`);
+        const x = args[0], y = args[1];
+        if (typeof x !== 'string' || !BY_ID[x]) fail(`${name}(): unknown control '${x}'`);
+        if (typeof y !== 'string' || !BY_ID[y]) fail(`${name}(): unknown control '${y}'`);
+        const p = rectOf(x), q = rectOf(y);
+        if (name === 'controltch') {
+          return (p.x + p.w >= q.x) && (p.x <= q.x + q.w) && (p.y + p.h >= q.y) && (p.y <= q.y + q.h) ? 1 : 0;
+        }
+        return (p.x >= q.x && p.x + p.w <= q.x + q.w && p.y >= q.y && p.y + p.h <= q.y + q.h) ? 1 : 0;
+      }
+      case 'combine': {
+        if (!args.length) fail('combine() needs at least 1 arg');
+        let s = '';
+        for (const v of args) {
+          const x = numOf(v);
+          if (x > 9.2e18) fail('combine(): arg is too large');
+          const iv = lround(x);
+          if (iv < 0) fail('combine(): args must be >= 0');
+          s += String(iv);
+        }
+        if (s.length > 15) fail('combine(): combined number is too large (max 15 digits)');
+        return Number(s);
+      }
+      case 'irnd': {
+        if (!args.length) return Math.floor(Math.random() * 2147483648);
+        if (args.length !== 2) fail('irnd() must be 0 or 2 args');
+        const lo = Math.trunc(a(0)), hi = Math.trunc(a(1));
+        if (lo > hi) fail('irnd(): A must be lower than B');
+        return lo + Math.floor(Math.random() * (hi - lo + 1));
+      }
+      case 'drnd': {
+        if (!args.length) return Math.random();
+        if (args.length !== 2) fail('drnd() must be 0 or 2 args');
+        const lo = a(0), hi = a(1);
+        if (lo > hi) fail('drnd(): A must be lower than B');
+        return lo + Math.random() * (hi - lo);
+      }
+      case 'sqrt': return Math.sqrt(a(0));
+      case 'cbrt': return Math.cbrt(a(0));
+      case 'pow': return Math.pow(a(0), a(1));
+      case 'rads': return a(0) * Math.PI / 180;
+      case 'degs': return a(0) * 180 / Math.PI;
+      case 'sin': { const x = Math.sin(a(0)); return Math.abs(x) < 1e-12 ? 0 : x; }
+      case 'cos': { const x = Math.cos(a(0)); return Math.abs(x) < 1e-12 ? 0 : x; }
+      case 'tan': {
+        const x = a(0);
+        if (Math.abs(Math.cos(x)) < 1e-12) fail('tan is undefined for this angle');
+        const y = Math.tan(x);
+        return Math.abs(y) < 1e-12 ? 0 : y;
+      }
+      case 'asin': {
+        const x = a(0);
+        if (x < -1 || x > 1) fail('asin(): arg must be between -1 and 1');
+        return Math.asin(x);
+      }
+      case 'acos': {
+        const x = a(0);
+        if (x < -1 || x > 1) fail('acos(): arg must be between -1 and 1');
+        return Math.acos(x);
+      }
+      case 'atan': return Math.atan(a(0));
+      case 'atan2': return Math.atan2(a(0), a(1));
+      case 'sinh': return Math.sinh(a(0));
+      case 'cosh': return Math.cosh(a(0));
+      case 'tanh': return Math.tanh(a(0));
+      case 'hypot': return Math.hypot(a(0), a(1));
+      case 'min': return Math.min(a(0), a(1));
+      case 'max': return Math.max(a(0), a(1));
+      case 'fmod': return a(0) % a(1);
+      case 'remainder': return a(0) - rint(a(0) / a(1)) * a(1);
+      case 'mod': {
+        if (a(1) === 0) fail('mod(): division by zero');
+        return cMod(a(0), a(1));
+      }
+      case 'clamp': {
+        if (a(1) > a(2)) fail('clamp(): B must be lower than C');
+        return clamp(a(0), a(1), a(2));
+      }
+      case 'abs': return Math.abs(a(0));
+      case 'round': return lround(a(0));
+      case 'floor': return Math.floor(a(0));
+      case 'ceil': return Math.ceil(a(0));
+      case 'trunc': return Math.trunc(a(0));
+      case 'nearbyint':
+      case 'rint': return rint(a(0));
+      case 'sign': return a(0) > 0 ? 1 : (a(0) < 0 ? -1 : 0);
+      case 'log': return Math.log(a(0));
+      case 'log10': return Math.log10(a(0));
+      case 'log2': return Math.log2(a(0));
+      case 'log1p': return Math.log1p(a(0));
+      case 'exp': return Math.exp(a(0));
+      case 'exp2': return Math.pow(2, a(0));
+      case 'expm1': return Math.expm1(a(0));
+      case 'lerp': return a(0) + (a(1) - a(0)) * a(2);
+      case 'map': {
+        if (a(1) === a(2)) fail('map(): A and B can\'t be equal');
+        return a(3) + (a(0) - a(1)) * (a(4) - a(3)) / (a(2) - a(1));
+      }
+      case 'rgb': {
+        const r = Math.round(clamp(a(0), 0, 255));
+        const g = Math.round(clamp(a(1), 0, 255));
+        const b = Math.round(clamp(a(2), 0, 255));
+        return (r << 16) | (g << 8) | b;
+      }
+      case 'hsv': {
+        let hue = a(0) % 360;
+        if (hue < 0) hue += 360;
+        const sat = clamp(a(1), 0, 100) / 100;
+        const val = clamp(a(2), 0, 100) / 100;
+        const chroma = val * sat;
+        const hp = hue / 60;
+        const mid = chroma * (1 - Math.abs((hp % 2) - 1));
+        let r = 0, g = 0, b = 0;
+        if (hp < 1) { r = chroma; g = mid; }
+        else if (hp < 2) { r = mid; g = chroma; }
+        else if (hp < 3) { g = chroma; b = mid; }
+        else if (hp < 4) { g = mid; b = chroma; }
+        else if (hp < 5) { r = mid; b = chroma; }
+        else { r = chroma; b = mid; }
+        const m = val - chroma;
+        return (Math.round(clamp((r + m) * 255, 0, 255)) << 16) |
+               (Math.round(clamp((g + m) * 255, 0, 255)) << 8) |
+                Math.round(clamp((b + m) * 255, 0, 255));
+      }
+      case 'oklch': {
+        const C = Math.max(a(1), 0) / 100 * 0.4;
+        const H = a(2) * Math.PI / 180;
+        return oklabColor({ L: clamp(a(0), 0, 100) / 100, a: C * Math.cos(H), b: C * Math.sin(H) });
+      }
+      case 'mix': {
+        const c1 = readColor('mix', args[0]), c2 = readColor('mix', args[1]);
+        const t = clamp(a(2), 0, 1);
+        const x = oklabMake(c1), y = oklabMake(c2);
+        return oklabColor({ L: x.L + (y.L - x.L) * t, a: x.a + (y.a - x.a) * t, b: x.b + (y.b - x.b) * t });
+      }
+      case 'red':
+      case 'green':
+      case 'blue': {
+        const c = readColor(name, args[0]);
+        return (c >> (name === 'red' ? 16 : name === 'green' ? 8 : 0)) & 255;
+      }
+      case 'lighten':
+      case 'darken': {
+        const c = readColor(name, args[0]);
+        const lab = oklabMake(c);
+        lab.L = clamp(lab.L + (a(1) / 100) * (name === 'lighten' ? 1 : -1), 0, 1);
+        return oklabColor(lab);
+      }
+      case 'invert': return (readColor(name, args[0]) ^ 0xFFFFFF) >>> 0;
+      case 'gray': {
+        const lab = oklabMake(readColor(name, args[0]));
+        lab.a = lab.b = 0;
+        return oklabColor(lab);
+      }
+      case 'contrast': return oklabMake(readColor(name, args[0])).L > 0.565 ? 0 : 16777215;
+    }
+    return fail(`unknown function ${name}()`);
+  }
+
+  function evalBlock(b, ctx) {
+    if (!b) return 0;
+    switch (b.type) {
+      case 'num': return Number(b.fields && b.fields.V) || 0;
+      case 'const': return constant(b.fields && b.fields.N, ctx);
+      case 'kw': return b.fields && b.fields.N;
+      case 'var': return fail(`unknown variable '${b.fields && b.fields.N}'`);
+      case 'neg': return -numOf(evalBlock(child(b, 'A'), ctx));
+      case 'op': {
+        const x = numOf(evalBlock(child(b, 'A'), ctx));
+        const y = numOf(evalBlock(child(b, 'B'), ctx));
+        switch (b.fields && b.fields.OP) {
+          case '+': return x + y;
+          case '-': return x - y;
+          case '*': return x * y;
+          case '/': if (y === 0) fail('division by zero'); return x / y;
+          case '^': return Math.pow(x, y);
+        }
+        return fail('unknown operator');
+      }
+      case 'cmp': {
+        const x = numOf(evalBlock(child(b, 'A'), ctx));
+        const y = numOf(evalBlock(child(b, 'B'), ctx));
+        switch (b.fields && b.fields.OP) {
+          case '<': return x < y ? 1 : 0;
+          case '>': return x > y ? 1 : 0;
+          case '<=': return x <= y ? 1 : 0;
+          case '>=': return x >= y ? 1 : 0;
+          case '=': return x === y ? 1 : 0;
+        }
+        return fail('unknown comparison');
+      }
+      case 'logic': {
+        const x = numOf(evalBlock(child(b, 'A'), ctx));
+        const y = numOf(evalBlock(child(b, 'B'), ctx));
+        return b.fields && b.fields.OP === '&' ? (x !== 0 && y !== 0 ? 1 : 0) : (x !== 0 || y !== 0 ? 1 : 0);
+      }
+      case 'unit': {
+        const v = numOf(evalBlock(child(b, 'A'), ctx));
+        return b.fields && b.fields.U === 'deg' ? v * Math.PI / 180 : v;
+      }
+    }
+    if (typeof b.type === 'string' && b.type.startsWith('f_')) return evalFn(b.type.slice(2), b, ctx);
+    return fail(`unknown block ${b.type}`);
+  }
+
+  /* ---------- state ---------- */
+  let open = false;
+  let timer = null;
+  let modal = null;
+  let sel = 'ProductName';
+  let def = BY_ID.ProductName;
+  let rect = { x: def.x, y: def.y, w: def.w, h: def.h };
+  let winW = 458, winH = 391;
+  let winX = 0, winY = TB, scale = 1;
+  let simStart = 0;
+  let placed = false;  // the window is centred only the first time; later opens keep its position
+  let simFocused = false;
+  let mouse = { x: 0, y: 0 };
+  let posExprs = [null, null, null, null];
+  let colExpr = null;
+  let posSec = [];
+  let colSec = {};
+  let applyPos = true;
+  let applyCol = false;
+  let drag = null;
+  let moveRaf = 0;
+  /* One-shot expressions handed over by the Examples dialog. Never written to the builder. */
+  let override = null;
+
+  const newSection = () => ({ active: false, stopped: false, delayMs: 0, nextDue: 0, calls: [], error: null });
+  const newColorSection = () => ({ active: false, stopped: false, delayMs: 0, nextDue: 0, calls: [], error: null, value: null });
+
+  function snapshotExprs(ov) {
+    if (ov) {
+      const list = Array.isArray(ov.pos) ? ov.pos.slice(0, 4) : [];
+      while (list.length < 4) list.push(null);
+      posExprs = list;
+      colExpr = ov.col || null;
+      return;
+    }
+    const curPos = mode === 'pos' ? Blockly.serialization.workspaces.save(W) : (saved.pos || null);
+    const curCol = mode === 'col' ? Blockly.serialization.workspaces.save(W) : (saved.col || null);
+    const root = (json, type) => {
+      const list = json && json.blocks && json.blocks.blocks;
+      if (!list) return null;
+      const r = list.find(b => b.type === type);
+      return (r && r.inputs && r.inputs.E && r.inputs.E.block) || null;
+    };
+    posExprs = ['root_x', 'root_y', 'root_w', 'root_h'].map(t => root(curPos, t));
+    colExpr = root(curCol, 'root_c');
+  }
+
+  function evalFieldValue(rootBlock, field, snap, sec, tick, reg) {
+    if (!rootBlock) return { value: [def.x, def.y, def.w, def.h][field], seen: false, delay: 0 };
+    if (rootBlock.type === 'const') {
+      const n = rootBlock.fields && rootBlock.fields.N;
+      if (n === 'd') return { value: [def.x, def.y, def.w, def.h][field], seen: false, delay: 0 };
+      if (n === 'w') return { value: winW, seen: false, delay: 0 };
+      if (n === 'h') return { value: winH, seen: false, delay: 0 };
+    }
+    const ctx = {
+      field, snap, sec, tick, reg, color: false,
+      seen: false, delay: 0, callIndex: 0, inDyn: 0
+    };
+    let value = evalBlock(rootBlock, ctx);
+    if (!Number.isFinite(value)) fail('result is not a finite number');
+    return { value, seen: ctx.seen, delay: ctx.delay };
+  }
+
+  function evalPositionAll(register) {
+    const now = performance.now();
+    const snap = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    const out = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    const fields = ['x', 'y', 'w', 'h'];
+
+    for (let i = 0; i < 4; i++) {
+      const sec = posSec[i];
+      if (!register && (sec.active || sec.stopped)) continue;
+      if (register) {
+        sec.calls = [];
+        sec.active = false;
+        sec.stopped = false;
+        sec.nextDue = 0;
+      }
+      sec.error = null;
+      let value = 0, seen = false, delay = 0;
+      try {
+        const r = evalFieldValue(posExprs[i], i, snap, sec, false, register);
+        value = r.value; seen = r.seen; delay = r.delay;
+      } catch (e) {
+        sec.error = e.message;
+      }
+      let v = seen ? lround(value) : Math.trunc(value);
+      if (i >= 2 && seen && v < 0) v = 0;
+      out[fields[i]] = v;
+      if (register) {
+        sec.active = seen;
+        sec.delayMs = seen ? Math.max(10, delay || 10) : 0;
+        if (seen) sec.nextDue = now + sec.delayMs;
+      } else if (seen) {
+        if (delay > 0) sec.delayMs = delay;
+        if (!sec.active) {
+          sec.active = true;
+          sec.nextDue = now + Math.max(10, sec.delayMs || 10);
+        }
+      } else {
+        sec.active = false;
+      }
+    }
+    rect = out;
+  }
+
+  function registerColor(target) {
+    const sec = colSec[target];
+    sec.calls = [];
+    sec.active = false;
+    sec.stopped = false;
+    sec.nextDue = 0;
+    sec.error = null;
+    if (!colExpr) {
+      sec.value = null;
+      return;
+    }
+    const snap = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    const ctx = {
+      field: null, snap, sec, tick: false, reg: true, color: true,
+      seen: false, delay: 0, callIndex: 0, inDyn: 0
+    };
+    try {
+      let v = evalBlock(colExpr, ctx);
+      if (!Number.isFinite(v)) fail('result is not a finite number');
+      v = lround(v);
+      if (v < 0 || v > 16777215) fail(`${v} is not a valid colour (must be 0 - 16777215)`);
+      sec.value = v;
+      sec.active = ctx.seen;
+      sec.delayMs = ctx.seen ? Math.max(10, ctx.delay || 10) : 0;
+      if (ctx.seen) sec.nextDue = performance.now() + sec.delayMs;
+    } catch (e) {
+      sec.error = e.message;
+      sec.value = null;
+      sec.active = false;
+    }
+  }
+
+  function registerColors() {
+    for (const t of TARGETS) registerColor(t);
+  }
+
+  function tickPosition(i, now) {
+    const sec = posSec[i];
+    if (!sec.active || sec.nextDue > now) return false;
+    const fields = ['x', 'y', 'w', 'h'];
+    const snap = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    const ctx = {
+      field: i, snap, sec, tick: true, reg: false, color: false,
+      seen: false, delay: 0, callIndex: 0, inDyn: 0
+    };
+    try {
+      let value = evalBlock(posExprs[i], ctx);
+      if (!Number.isFinite(value)) fail('result is not a finite number');
+      if (ctx.delay > 0) sec.delayMs = ctx.delay;
+      let v = lround(value);
+      if (i >= 2 && v < 0) v = 0;
+      rect[fields[i]] = v;
+      sec.error = null;
+    } catch (e) {
+      sec.error = e.message;
+      sec.active = false;
+      sec.stopped = true;
+      return true;
+    }
+    const d = Math.max(1, sec.delayMs || 10);
+    sec.nextDue += (Math.floor((now - sec.nextDue) / d) + 1) * d;
+    return true;
+  }
+
+  function tickColor(target, now) {
+    const sec = colSec[target];
+    if (!sec.active || sec.nextDue > now) return false;
+    const snap = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    const ctx = {
+      field: null, snap, sec, tick: true, reg: false, color: true,
+      seen: false, delay: 0, callIndex: 0, inDyn: 0
+    };
+    try {
+      let v = evalBlock(colExpr, ctx);
+      if (!Number.isFinite(v)) fail('result is not a finite number');
+      v = lround(v);
+      if (v < 0 || v > 16777215) fail(`${v} is not a valid colour (must be 0 - 16777215)`);
+      sec.value = v;
+      sec.error = null;
+    } catch (e) {
+      sec.error = e.message;
+      sec.active = false;
+      sec.stopped = true;
+      return true;
+    }
+    if (ctx.delay > 0) sec.delayMs = ctx.delay;
+    const d = Math.max(1, sec.delayMs || 10);
+    sec.nextDue += (Math.floor((now - sec.nextDue) / d) + 1) * d;
+    return true;
+  }
+
+  function firstError() {
+    const fields = ['x', 'y', 'width', 'height'];
+    if (applyPos) {
+      for (let i = 0; i < 4; i++) {
+        if (posSec[i] && posSec[i].error) return `${fields[i]}: ${posSec[i].error}`;
+      }
+    }
+    const target = $id('sim-color-target').value;
+    if (applyCol && colSec[target] && colSec[target].error) return `${target}: ${colSec[target].error}`;
+    return '';
+  }
+
+  /* ---------- timing ---------- */
+  function stopTimer() {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  }
+
+  function syncTimer() {
+    stopTimer();
+    if (!open) return;
+    let earliest = Infinity;
+    for (const sec of posSec) if (sec.active) earliest = Math.min(earliest, sec.nextDue);
+    for (const t of TARGETS) {
+      const sec = colSec[t];
+      if (sec.active) earliest = Math.min(earliest, sec.nextDue);
+    }
+    if (!Number.isFinite(earliest)) return;
+    timer = setTimeout(onTimer, Math.max(10, earliest - performance.now()));
+  }
+
+  function onTimer() {
+    timer = null;
+    if (!open) return;
+    const now = performance.now();
+    let changed = false;
+    for (let i = 0; i < 4; i++) if (tickPosition(i, now)) changed = true;
+    for (const t of TARGETS) if (tickColor(t, now)) changed = true;
+    if (changed) render();
+    syncTimer();
+  }
+
+  /* ---------- rendering ---------- */
+  function parseOutline(value) {
+    const p = String(value).split(';').map(v => parseInt(v.trim(), 10));
+    if (p.length !== 4 || p.some(v => !Number.isFinite(v))) return [0, 0, 0, 0];
+    // left;top;right;bottom, like the mod. Negative values shift the ring (drop shadow).
+    return p.map(v => clamp(v, -50, 50));
+  }
+
+  function outlineShadow(offsets, color) {
+    const [l, t, r, b] = offsets;
+    const out = [];
+    for (let dy = -t; dy <= b; dy++) {
+      for (let dx = -l; dx <= r; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = dx < 0 ? dx / -l : dx / (r || 1);
+        const ny = dy < 0 ? dy / -t : dy / (b || 1);
+        if (nx * nx + ny * ny > 1) continue;
+        out.push(`${dx}px ${dy}px 0 ${color}`);
+      }
+    }
+    return out.length ? out.join(', ') : 'none';
+  }
+
+  function applyText(c, id) {
+    const s = texts[id];
+    c.text.innerHTML = '';
+    if (id === 'LicenseInfo') {
+      const i = s.indexOf(LICENSE_PHRASE);
+      if (i >= 0) {
+        c.text.innerHTML =
+          escHTML(s.slice(0, i)) +
+          '<span class="sim-link">' + escHTML(LICENSE_PHRASE) + '</span>' +
+          escHTML(s.slice(i + LICENSE_PHRASE.length));
+        return;
+      }
+    }
+    c.text.textContent = s;
+  }
+
+  function render() {
+    const target = $id('sim-color-target').value;
+    const fill = colSec.fill && colSec.fill.value;
+    const textColor = colSec.text && colSec.text.value;
+    const outlineColor = colSec.textoutline && colSec.textoutline.value;
+    const showText = target !== 'fill' || $id('sim-showtext').checked;
+    const outlineCss = outlineShadow(parseOutline($id('sim-outline').value),
+      outlineColor != null ? cssColor(outlineColor) : '#000000');
+
+    for (const d of DEFS) {
+      const c = controls[d.id];
+      const isSel = d.id === sel;
+      const r = isSel && applyPos ? rect : d;
+
+      /* All controls are always on screen at their own geometry. */
+      c.el.style.left = Math.round(r.x) + 'px';
+      c.el.style.top = Math.round(r.y) + 'px';
+      c.el.style.width = Math.max(0, Math.round(r.w)) + 'px';
+      c.el.style.height = Math.max(0, Math.round(r.h)) + 'px';
+      c.guide.hidden = !isSel;
+
+      /* Defaults for every control… */
+      c.el.style.background = '';
+      c.el.style.boxShadow = '';
+      c.el.classList.toggle('center', d.id === 'OkButton');
+      c.text.style.color = DEFAULT_TEXT_COLOR;
+      c.text.style.textShadow = 'none';
+      c.text.style.visibility = 'visible';
+      applyText(c, d.id);
+
+      /* …and the expression only touches the selected one. */
+      if (!isSel) continue;
+      if (!applyCol) continue;
+      if (target === 'fill' && fill != null) {
+        c.el.style.background = cssColor(fill);
+        if (d.id === 'Separator') c.el.style.boxShadow = 'none';
+      }
+      if (target === 'fill' && !showText) c.text.style.visibility = 'hidden';
+      if (target === 'text' && textColor != null) {
+        c.text.style.color = cssColor(textColor);
+        for (const sp of c.text.querySelectorAll('.sim-link')) sp.style.color = cssColor(textColor);
+      }
+      if (target === 'textoutline') c.text.style.textShadow = outlineCss;
+    }
+
+    const cv = applyCol && colSec[target] ? colSec[target].value : null;
+    const colorTxt = cv == null ? 'none'
+      : `${cssColor(cv).toUpperCase()} / rgb(${(cv >> 16) & 255}, ${(cv >> 8) & 255}, ${cv & 255})`;
+    $id('sim-geom').textContent =
+      `color: ${colorTxt}, pos/size: ${Math.round(rect.w)},${Math.round(rect.h)},${Math.round(rect.x)},${Math.round(rect.y)}`;
+       const err = firstError();
+    $id('sim-err').textContent = err ? 'Warning: ' + err : '';
+  }
+
+  /* ---------- window placement ---------- */
+  function updateScale() {
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    if (!sw || !sh) return;
+    scale = Math.min(1, (sw - 24) / winW, (sh - 24) / (winH + TB));
+    if (!Number.isFinite(scale) || scale <= 0) scale = 1;
+  }
+
+  function clampWindow() {
+    const vw = stage.clientWidth / scale;
+    const vh = stage.clientHeight / scale;
+    winX = clamp(winX, 0, Math.max(0, vw - winW));
+    winY = clamp(winY, TB, Math.max(TB, vh - winH));
+  }
+
+  function placeWindow() {
+    win.style.left = winX * scale + 'px';
+    win.style.top = (winY - TB) * scale + 'px';
+    win.style.transform = `scale(${scale})`;
+  }
+
+  function layoutWindow(center) {
+    win.style.width = winW + 'px';
+    win.style.height = winH + TB + 'px';
+    client.style.height = winH + 'px';
+    updateScale();
+    if (center) {
+      winX = Math.max(0, (stage.clientWidth / scale - winW) / 2);
+      winY = TB + Math.max(0, (stage.clientHeight / scale - (winH + TB)) / 2);
+    } else {
+      clampWindow();
+    }
+    placeWindow();
+  }
+
+  /* ---------- events / lifecycle ---------- */
+  function resetRectToDefault() {
+    rect = { x: def.x, y: def.y, w: def.w, h: def.h };
+  }
+
+  function updateTextReset() {
+    $id('sim-text-reset').disabled = texts[sel] === BY_ID[sel].text;
+  }
+
+  function resetForControl() {
+    def = BY_ID[sel];
+    resetRectToDefault();
+    posSec = [newSection(), newSection(), newSection(), newSection()];
+    colSec = { text: newColorSection(), fill: newColorSection(), textoutline: newColorSection() };
+    $id('sim-text').value = texts[sel];
+    updateTextReset();
+  }
+
+  function reevaluateStatic() {
+    if (!open) return;
+    if (applyPos) evalPositionAll(false);
+    else resetRectToDefault();
+    render();
+  }
+
+  function startSim() {
+    open = true;
+    stopTimer();
+    const ov = override;
+    override = null;
+    snapshotExprs(ov);
+
+    let w = parseInt($id('sim-w').value, 10);
+    let h = parseInt($id('sim-h').value, 10);
+    if (!Number.isFinite(w) || w < 1) w = 458;
+    if (!Number.isFinite(h) || h < 1) h = 391;
+    winW = Math.min(5000, w);
+    winH = Math.min(5000, h);
+    $id('sim-w').value = winW;
+    $id('sim-h').value = winH;
+
+    sel = $id('sim-control').value || 'ProductName';
+
+    /* Preview only: every session starts from the controls' own texts. */
+    for (const d of DEFS) texts[d.id] = d.text;
+
+    /* Open in the mode the builder is in; an example brings its own mode. */
+    const colMode = ov ? ov.mode === 'col' : $id('m-col').checked;
+    applyPos = !colMode;
+    applyCol = colMode;
+    $id('sim-apply-pos').checked = applyPos;
+    $id('sim-apply-col').checked = applyCol;
+
+    resetForControl();
+    simStart = performance.now();
+    simFocused = true;
+    win.classList.remove('inactive');
+
+    layoutWindow(!placed);
+    placed = true;
+    mouse.x = winX + winW / 2;
+    mouse.y = winY + winH / 2;
+
+    if (applyPos) evalPositionAll(true);
+    else resetRectToDefault();
+    if (applyCol) registerColors();
+    render();
+    syncTimer();
+
+    document.removeEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointermove', onPointerMove, { passive: true });
+    win.focus();
+  }
+
+  function endSim() {
+    open = false;
+    override = null;
+    stopTimer();
+    document.removeEventListener('pointermove', onPointerMove);
+    simFocused = false;
+    drag = null;
+    if (moveRaf) cancelAnimationFrame(moveRaf);
+    moveRaf = 0;
+  }
+
+  function onPointerMove(e) {
+    if (!open) return;
+    const r = stage.getBoundingClientRect();
+    mouse.x = (e.clientX - r.left) / scale;
+    mouse.y = (e.clientY - r.top) / scale;
+    if (!moveRaf) {
+      moveRaf = requestAnimationFrame(() => {
+        moveRaf = 0;
+        if (open) reevaluateStatic();
+      });
+    }
+  }
+
+  titlebar.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('#sim-close')) return;
+    win.focus();
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, wx: winX, wy: winY };
+    titlebar.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  titlebar.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    winX = drag.wx + (e.clientX - drag.x) / scale;
+    winY = drag.wy + (e.clientY - drag.y) / scale;
+    clampWindow();
+    placeWindow();
+    reevaluateStatic();
+  });
+  const endDrag = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag = null;
+  };
+  titlebar.addEventListener('pointerup', endDrag);
+  titlebar.addEventListener('pointercancel', endDrag);
+
+  client.addEventListener('click', e => {
+    const c = e.target.closest('.sim-ctrl');
+    if (!open || !c || c.dataset.id === sel) return;
+    $id('sim-control').value = c.dataset.id;
+    $id('sim-control').dispatchEvent(new Event('change'));
+  });
+
+  win.addEventListener('pointerdown', e => {
+    if (!e.target.closest('#sim-titlebar')) win.focus();
+  });
+  win.addEventListener('focus', () => {
+    simFocused = true;
+    win.classList.remove('inactive');
+    reevaluateStatic();
+  });
+  win.addEventListener('blur', () => {
+    simFocused = false;
+    win.classList.add('inactive');
+    reevaluateStatic();
+  });
+  stage.addEventListener('pointerdown', e => {
+    if (!win.contains(e.target)) win.blur();
+  });
+
+  window.addEventListener('resize', () => {
+    if (!open) return;
+    layoutWindow(false);
+    reevaluateStatic();
+  });
+
+  function syncTargetUI() {
+    const t = $id('sim-color-target').value;
+    $id('sim-fill-wrap').hidden = t !== 'fill';
+    $id('sim-outline-wrap').hidden = t !== 'textoutline';
+    render();
+  }
+
+  function setApply(pos, col) {
+    const posChanged = applyPos !== pos;
+    const colChanged = applyCol !== col;
+    applyPos = pos;
+    applyCol = col;
+    $id('sim-apply-pos').checked = pos;
+    $id('sim-apply-col').checked = col;
+    if (!open) return;
+    if (posChanged) {
+      if (pos) evalPositionAll(true);
+      else {
+        for (const sec of posSec) sec.active = false;
+        resetRectToDefault();
+      }
+    }
+    if (colChanged) {
+      if (col) registerColors();
+      else for (const t of TARGETS) { colSec[t].active = false; colSec[t].value = null; }
+    }
+    render();
+    syncTimer();
+  }
+
+  function onApplyToggle(e) {
+    const pos = $id('sim-apply-pos').checked;
+    const col = $id('sim-apply-col').checked;
+    if (!pos && !col) { e.target.checked = true; return; }  // keep at least one active
+    setApply(pos, col);
+  }
+
+  $id('simulate').addEventListener('click', () => {
+    override = null;
+    if (!modal) modal = bootstrap.Modal.getOrCreateInstance($id('simModal'));
+    modal.show();
+  });
+
+  const modalEl = $id('simModal');
+  modalEl.addEventListener('shown.bs.modal', startSim);
+  modalEl.addEventListener('hide.bs.modal', endSim);
+
+  /* The fake window's own X closes the preview (and with it the modal). */
+  $id('sim-close').addEventListener('pointerdown', e => e.preventDefault());
+  $id('sim-close').addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+  });
+
+  /* Called by the Examples dialog: preview a hand-built payload without touching the builder. */
+  window.simulateExampleExpression = payload => {
+    override = payload;
+    if (!modal) modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+  };
+
+  $id('sim-control').innerHTML = CONTROL_ORDER.map(([id, label]) => `<option value="${id}" title="${id}">${label}</option>`).join('');
+  $id('sim-control').value = 'ProductName';
+  $id('sim-control').addEventListener('change', () => {
+    const next = $id('sim-control').value;
+    if (next !== sel) {
+      texts[sel] = BY_ID[sel].text;  // leaving a control throws its text preview away
+      sel = next;
+    }
+    resetForControl();
+    if (!open) return;
+    if (applyPos) evalPositionAll(true);
+    else resetRectToDefault();
+    if (applyCol) registerColors();
+    render();
+    syncTimer();
+  });
+  $id('sim-apply-pos').addEventListener('change', onApplyToggle);
+  $id('sim-apply-col').addEventListener('change', onApplyToggle);
+  $id('sim-color-target').addEventListener('change', syncTargetUI);
+  $id('sim-showtext').addEventListener('change', render);
+  $id('sim-outline').addEventListener('input', render);
+  $id('sim-text').addEventListener('input', () => {
+    texts[sel] = $id('sim-text').value;
+    updateTextReset();
+    render();
+  });
+  $id('sim-text-reset').addEventListener('click', () => {
+    texts[sel] = BY_ID[sel].text;
+    $id('sim-text').value = texts[sel];
+    updateTextReset();
+    render();
+  });
+  $id('sim-w').addEventListener('change', () => {
+    let w = parseInt($id('sim-w').value, 10);
+    if (!Number.isFinite(w) || w < 1) w = winW;
+    winW = Math.min(5000, w);
+    $id('sim-w').value = winW;
+    if (!open) return;
+    layoutWindow(false);
+    reevaluateStatic();
+  });
+  $id('sim-h').addEventListener('change', () => {
+    let h = parseInt($id('sim-h').value, 10);
+    if (!Number.isFinite(h) || h < 1) h = winH;
+    winH = Math.min(5000, h);
+    $id('sim-h').value = winH;
+    if (!open) return;
+    layoutWindow(false);
+    reevaluateStatic();
+  });
+})();
+</script>
+
+</body>
+</html>
