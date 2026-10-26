@@ -380,6 +380,7 @@ dyn|d|1,2|Re-evaluates the whole field every N ms (min 10). One per field, no ne
 shift|d|2,3,4,5,6|Moves a value one step on every dyn update. Must be inside dyn. Mode is forward or loop.|start,end,step size,mode,skip updates,initial skip
 shift2|d|2,3,4,5,6|Same as shift, but the last step stops exactly at the end.|start,end,step size,mode,skip updates,initial skip
 if|d|3|Gives the "if true" value when the condition is true, otherwise the "if false" value. Conditions use comparisons, AND and OR.|condition,if true,if false
+not|d|1|1 if the value is 0 (false), otherwise 0. Flips a condition, e.g. not(mouseincontrol).|condition
 replace|d|3,5,7,9,11,13,15,17,19,21|Swaps values: if the value equals "if equals", it becomes "change to". Continuous: a changed value can trigger the next pair.
 replace2|d|3,5,7,9,11,13,15,17,19,21|Like replace, but not continuous: each value is changed at most once.
 steal|d|2|Gets another control's x, y, w or h.|control,property
@@ -555,7 +556,7 @@ function gen(b) {
     return { s: (atom ? r.s : '(' + r.s + ')') + f('U'), p: 4 };
   }
   const name = t.slice(2), args = [];
-  for (let i = 0; i < b.n; i++) args.push(wrap(gen(b.getInputTargetBlock('A' + i)), name === 'if' && i === 0 ? 1 : 4));
+  for (let i = 0; i < b.n; i++) args.push(wrap(gen(b.getInputTargetBlock('A' + i)), (name === 'if' || name === 'not') && i === 0 ? 1 : 4));
   return { s: name + '(' + args.join(', ') + ')', p: 8 };
 }
 
@@ -853,7 +854,19 @@ const EXAMPLE_SETS = {
     { name: 'March right', expr: '!dyn(shift2(dcx,dcx+40,2,forward),16);d;d;d', desc: 'Creep 40 px to the right in 2 px steps, then jump back.' },
     { name: 'Hover snap', expr: '!dyn(if(mouseincontrol, w-dcw-6, dcx),30);d;d;d', desc: 'Jump to the right edge while hovered, then return on leave.' },
     { name: 'Breathing width', expr: '!d;!d;!dyn(dcw+sin(time/180)*12,16);d', desc: 'Let the width gently grow and shrink by 12 px.' },
-    { name: 'Move onto OK button', expr: '!steal(OkButton,x);!steal(OkButton,y);d;d', desc: 'Move to the OK button top-left corner and keep the original size. Select another control to see the move.' }
+    { name: 'Move onto OK button', expr: '!steal(OkButton,x);!steal(OkButton,y);d;d', desc: 'Move to the OK button top-left corner and keep the original size. Select another control to see the move.' },
+    { name: 'Center when mouse leaves', expr: '!dyn(if(not(mouseinwindow), centerx, mouserelx-dcw/2),16);!dyn(if(not(mouseinwindow), centery, mouserely-dch/2),16);d;d', desc: 'Follow the pointer inside the window and glide back to the center when the pointer leaves it.' },
+    { name: 'Slide away when unfocused', expr: '!dyn(if(not(focused), dcx+30, dcx),50);d;d;d', desc: 'Move 30 px right while the window is not focused.' },
+    { name: 'Blink when unfocused', expr: '!dyn(if(not(focused) & mod(time,600)<300, -1000, dcx),100);d;d;d', desc: 'Hide off-screen for half of every 600 ms, but only while the window is not focused.' },
+    { name: 'Blink every second', expr: '!dyn(if(mod(time,1000)<500, dcx, -1000),100);d;d;d', desc: 'Visible for 500 ms, off-screen for 500 ms, over and over.' },
+    { name: 'Slow wave', expr: 'd;!dyn(dcy+sin(time/300)*6,16);d;d', desc: 'Float up and down by 6 px around the original Y.' },
+    { name: 'Bob up', expr: 'd;!dyn(dcy-abs(sin(time/250))*20,16);d;d', desc: 'Hop up to 20 px and fall back down, like a bouncing ball.' },
+    { name: 'Spiral out', expr: '!dyn(centerx+cos(time/250)*mod(time/40,120),16);!dyn(centery+sin(time/250)*mod(time/40,120),16);d;d', desc: 'Spin outward from the window center, then restart from the middle.' },
+    { name: 'Diagonal stairs', expr: '!dyn(shift(dcx,dcx+60,15,loop),100);!dyn(shift(dcy,dcy+60,15,loop),100);d;d', desc: 'Step 15 px right and down at a time, 60 px in total, then step back.' },
+    { name: 'Random teleport', expr: '!dyn(irnd(0,max(0,w-dcw)),1000);!dyn(irnd(0,max(0,h-dch)),1000);d;d', desc: 'Jump to a random spot inside the window every second.' },
+    { name: 'Grow and shrink', expr: 'd;d;!dyn(dcw+abs(sin(time/400))*40,16);!dyn(dch+abs(sin(time/400))*10,16)', desc: 'Pulse both width (up to 40 px) and height (up to 10 px).' },
+    { name: 'Width ping-pong', expr: 'd;d;!dyn(shift(40,300,10,loop),30);d', desc: 'Stretch the width from 40 to 300 px in 10 px steps and back.' },
+    { name: 'Hang above OK button', expr: '!dyn(steal(OkButton,x),16);!dyn(steal(OkButton,y)-dch-4,16);d;d', desc: 'Stay 4 px above the OK button and follow it if it moves. Select another control to see the move.' }
   ],
   col: [
     { name: 'Hex accent', expr: '#0078D7', desc: 'The Windows accent blue written as a compact hex color.' },
@@ -885,7 +898,20 @@ const EXAMPLE_SETS = {
     { name: 'Orange pulse', expr: '!dyn(rgb(255, shift(0,255,10,loop), 0),60)', desc: 'Ramp the green channel from 0 to 255 and back for an orange to yellow pulse.' },
     { name: 'Gray fade', expr: '!dyn(mix(rgb(0,0,0),rgb(255,255,255),abs(mod(time,2000)/1000-1)),30)', desc: 'Fade smoothly from black to white and back.' },
     { name: 'Accent pastel', expr: '!mix(accent,rgb(255,255,255),0.65)', desc: 'Mix the accent with white for a pastel tint.' },
-    { name: 'Neon accent', expr: '!mix(accent,rgb(255,0,128),0.4)', desc: 'Mix the accent with hot pink for a neon tint.' }
+    { name: 'Neon accent', expr: '!mix(accent,rgb(255,0,128),0.4)', desc: 'Mix the accent with hot pink for a neon tint.' },
+    { name: 'Gray unless hovered', expr: '!dyn(if(not(mouseincontrol), gray(accent), accent),30)', desc: 'Show the accent color only while the pointer is over the control.' },
+    { name: 'Dim when unfocused', expr: '!dyn(if(not(focused), gray(accent), accent),50)', desc: 'Turn gray while the window is not focused.' },
+    { name: 'Warn outside window', expr: '!dyn(if(not(mouseinwindow), rgb(255,160,0), accent),50)', desc: 'Orange while the pointer is outside the window, accent otherwise.' },
+    { name: 'Police lights', expr: '!dyn(if(mod(time,600)<300, rgb(255,0,0), rgb(0,80,255)),100)', desc: 'Alternate between red and blue every 300 ms.' },
+    { name: 'Blink red', expr: '!dyn(if(mod(time,800)<400, rgb(255,60,60), rgb(255,255,255)),100)', desc: 'Flash between red and white.' },
+    { name: 'Neon flicker', expr: '!dyn(if(irnd(0,9)>7, rgb(60,60,60), rgb(0,255,200)),60)', desc: 'A neon sign that randomly flickers off for a moment.' },
+    { name: 'Candle flame', expr: '!dyn(hsv(30,90,map(drnd(),0,1,70,100)),80)', desc: 'A warm orange with randomly changing brightness.' },
+    { name: 'Confetti', expr: '!dyn(hsv(irnd(0,359),80,100),400)', desc: 'A new random hue every 400 ms.' },
+    { name: 'Sunset cycle', expr: '!dyn(mix(rgb(255,94,58),rgb(80,40,160),abs(mod(time,6000)/3000-1)),40)', desc: 'Blend slowly between orange and purple and back.' },
+    { name: 'Accent to white pulse', expr: '!dyn(mix(accent,rgb(255,255,255),abs(mod(time,1600)/800-1)),30)', desc: 'Pulse from the accent color to white and back.' },
+    { name: 'Mouse hue sweep', expr: '!dyn(oklch(70,50,map(mouserelx,0,w,0,360)),30)', desc: 'Mouse X picks the hue across the whole OKLCH rainbow.' },
+    { name: 'Mouse Y lightness', expr: '!dyn(oklch(map(mouserely,0,h,100,20),50,250),30)', desc: 'Mouse Y goes from light at the top to dark at the bottom.' },
+    { name: 'Stepped brightness', expr: '!dyn(hsv(210,70,shift2(30,100,5,loop)),60)', desc: 'Brighten a blue in 5% steps up to exactly 100, then dim it back.' }
   ]
 };
 
@@ -1339,6 +1365,7 @@ fill([]);
 
     switch (name) {
       case 'if': return a(0) !== 0 ? a(1) : a(2);
+      case 'not': return a(0) === 0 ? 1 : 0;
       case 'replace':
       case 'replace2': {
         if (args.length < 3 || args.length % 2 === 0) fail(`${name}(): min 3 args and pairs after the value`);
