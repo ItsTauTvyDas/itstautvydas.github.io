@@ -281,7 +281,7 @@
 <script>
 const $ = id => document.getElementById(id);
 const lines = s => s.trim().split('\n').map(l => l.split('|'));
-const DEF_INFO = 'Select a block to see what it does. Hovering a block in the toolbox shows that block\'s info; move the mouse away to go back to the selected block.';
+const DEF_INFO = 'Hover a block to see what it does.';
 
 /* ---------- data ---------- */
 const CONSTS = {};
@@ -765,25 +765,16 @@ function applyText() {
     $('out').classList.add('is-invalid');
   }
 }
-
-let sel = null; // currently selected block
 const show = b => { $('info').textContent = b && b.d ? b.d() : DEF_INFO; };
 W.addChangeListener(e => {
-  if (e.type === 'selected') {
-    sel = e.newElementId ? W.getBlockById(e.newElementId) : null;
-    show(sel);
-    return;
-  }
   if (!e.isUiEvent) { refresh(); layoutRoots(); }
 });
 
-// hovering a block in the open toolbox flyout shows its info; moving away shows the selected block again.
+// hovering a block (in the toolbox flyout or on the workspace) shows its info; moving away shows the default text.
 // the deepest match wins, so the small shadow values (the 0 in sin(0)) describe themselves instead of their parent.
-function flyoutBlockAt(target) {
-  const fly = W.getFlyout && W.getFlyout();
-  if (!fly || !fly.isVisible()) return null;
+function blockAt(ws, target) {
   let found = null, depth = -1;
-  for (const b of fly.getWorkspace().getAllBlocks(false)) {
+  for (const b of ws.getAllBlocks(false)) {
     const root = b.getSvgRoot && b.getSvgRoot();
     if (!root || !root.contains(target)) continue;
     let d = 0;
@@ -792,8 +783,16 @@ function flyoutBlockAt(target) {
   }
   return found;
 }
-$('ws').addEventListener('mouseover', e => show(flyoutBlockAt(e.target) || sel));
-$('ws').addEventListener('mouseleave', () => show(sel));
+function hoveredBlock(target) {
+  const fly = W.getFlyout && W.getFlyout();
+  if (fly && fly.isVisible()) {
+    const b = blockAt(fly.getWorkspace(), target);
+    if (b) return b;
+  }
+  return blockAt(W, target);
+}
+$('ws').addEventListener('mouseover', e => show(hoveredBlock(e.target)));
+$('ws').addEventListener('mouseleave', () => show(null));
 // after any drag/drop, re-flow the locked roots even if no change event reached us
 $('ws').addEventListener('pointerup', () => setTimeout(() => { refresh(); layoutRoots(); }, 0));
 
