@@ -406,7 +406,7 @@ drnd|d|0,2|Random decimal: 0 to 1, or between the lowest and highest.|lowest,hig
   FN[n].l = Array.from({ length: 21 }, (_, i) => i ? (i % 2 ? 'if equals ' : 'change to ') + Math.ceil(i / 2) : 'value');
 });
 
-const HUE = { num: 230, const: 330, kw: 160, var: 330, op: 230, cmp: 210, logic: 210, unit: 260, m: 230, t: 260, c: 20, d: 120 };
+const HUE = { num: 230, const: 330, kw: 160, var: 330, op: 230, cmp: 210, logic: 210, unit: 260, m: 230, t: 260, c: 20, d: 120, cmt: 60 };
 const ROOTS = {
   pos: ['root_x', 'root_y', 'root_w', 'root_h'],
   col: ['root_c']
@@ -456,6 +456,11 @@ def('unit', HUE.unit, function () {
   this.appendDummyInput().appendField(dd([['degrees', 'deg'], ['radians', 'rad']]), 'U');
   this.setInputsInline(false);
 }, 'Angle unit. Use inside sin, cos or tan to give the angle in degrees (or radians), e.g. sin(90deg).');
+def('comment', HUE.cmt, function () {
+  this.appendDummyInput().appendField('comment');
+  inp(this, 'A').appendField(new Blockly.FieldTextInput('note', v => v.replace(/\*\/|[;\r\n]/g, ' ')), 'T');
+  this.setInputsInline(false);
+}, 'A note for yourself. Does nothing, and gives back the value plugged into it. Text cannot contain ";" or "*/".');
 
 function root(type, label, d) {
   Blockly.Blocks[type] = {
@@ -534,7 +539,8 @@ const toolbox = {
     cat('Math', HUE.m, names('m')),
     cat('Trig and angles', HUE.t, [...names('t'), blk('unit', { U: 'deg' }, { A: sh(90) })]),
     cat('Colors', HUE.c, names('c')),
-    cat('Dynamic and logic', HUE.d, names('d'))
+    cat('Dynamic and logic', HUE.d, names('d')),
+	cat('Comments', HUE.cmt, [blk('comment')])
   ]
 };
 
@@ -549,6 +555,7 @@ function gen(b) {
   if (t === 'num') { const v = f('V'); return { s: '' + v, p: v < 0 ? 6 : 8 }; }
   if (t === 'const' || t === 'kw') return { s: f('N'), p: 8 };
   if (t === 'var') return { s: f('N') || '0', p: 8 };
+  if (t === 'comment') { const r = g('A'); return { s: '/*' + f('T') + '*/' + (r.p >= 8 ? r.s : '(' + r.s + ')'), p: 7 }; }
   if (t === 'neg') { const s = wrap(g('A'), 6); return { s: '-' + (s[0] === '-' ? '(' + s + ')' : s), p: 6 }; }
   if (t === 'op') {
     const o = f('OP'), L = wrap(g('A'), o === '^' ? 8 : PR[o]);
@@ -574,7 +581,17 @@ function gen(b) {
 /* ---------- text -> tree ---------- */
 function parseExpr(src) {
   let p = 0;
-  const sp = () => { while (src[p] === ' ' || src[p] === '\t') p++; };
+  const ws = () => { while (src[p] === ' ' || src[p] === '\t') p++; };
+  const sp = () => {
+    for (;;) {
+      ws();
+      if (src[p] === '#') p = src.length;
+      else if (src[p] === '/' && src[p + 1] === '*') {
+        const e = src.indexOf('*/', p + 2);
+        p = e < 0 ? src.length : e + 2;
+      } else return;
+    }
+  };
   const peek = () => { sp(); return src[p]; };
   const eat = c => { if (peek() === c) { p++; return true; } return false; };
   const err = m => { throw new Error(m + ' (character ' + (p + 1) + ')'); };
@@ -606,6 +623,15 @@ function parseExpr(src) {
     }
   }
   function fac() {
+    ws();
+    if (src[p] === '/' && src[p + 1] === '*') {
+      const e = src.indexOf('*/', p + 2);
+      if (e >= 0) {
+        const text = src.slice(p + 2, e).trim();
+        p = e + 2;
+        return { t: 'comment', c: text, a: fac() };
+      }
+    }
     if (eat('+')) return fac();
     if (eat('-')) return { t: 'neg', a: fac() };
     let n = prim();
@@ -702,6 +728,7 @@ function toJson(n) {
     case 'neg': return bl('neg', null, { A: toJson(n.a) });
     case 'unit': return bl('unit', { U: n.u }, { A: toJson(n.a) });
     case 'op': case 'cmp': case 'logic': return bl(n.t, { OP: n.o }, { A: toJson(n.a), B: toJson(n.b) });
+	case 'comment': return bl('comment', { T: n.c }, { A: toJson(n.a) });
     default: {
       const inputs = {};
       n.a.forEach((x, i) => inputs['A' + i] = toJson(x));
@@ -1567,6 +1594,7 @@ fill([]);
       case 'kw': return b.fields && b.fields.N;
       case 'var': return fail(`unknown variable '${b.fields && b.fields.N}'`);
       case 'neg': return -numOf(evalBlock(child(b, 'A'), ctx));
+	  case 'comment': return evalBlock(child(b, 'A'), ctx);
       case 'op': {
         const x = numOf(evalBlock(child(b, 'A'), ctx));
         const y = numOf(evalBlock(child(b, 'B'), ctx));
