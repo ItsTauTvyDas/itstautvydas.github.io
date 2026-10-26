@@ -142,7 +142,10 @@
 </head>
 <body class="bg-body-tertiary">
 <div class="container-fluid py-3">
-  <h1 class="h4 mb-1">Fully Customizable WinVer: math expression builder</h1>
+	<div class="d-flex align-items-center gap-2 mb-1">
+	  <h1 class="h4 mb-0">Fully Customizable WinVer: math expression builder</h1>
+	  <span class="badge text-bg-primary mt-1" id="ver" hidden></span>
+	</div>
   <p class="text-body-secondary small mb-3">Build an expression from blocks, or type or paste one below and press Apply. Only blocks attached inside the purple blocks count.</p>
 
   <div class="card mb-3 shadow-sm">
@@ -278,6 +281,14 @@
 
 <script src="https://cdn.jsdelivr.net/npm/blockly@11/blockly_compressed.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/blockly@11/msg/en.js"></script>
+<script src="mathexprsim.version.js"></script>
+<script>
+if (window.APP_VERSION) {
+  const v = document.getElementById('ver');
+  v.textContent = "ver. " + window.APP_VERSION;
+  v.hidden = false;
+}
+</script>
 <script>
 const $ = id => document.getElementById(id);
 const lines = s => s.trim().split('\n').map(l => l.split('|'));
