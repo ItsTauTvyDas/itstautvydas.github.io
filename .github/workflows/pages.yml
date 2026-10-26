@@ -1,0 +1,36 @@
+name: Deploy Pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - windhawk/customwinver/mathexprsim.html
+      - .github/workflows/pages.yml
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Write version for mathexprsim.html
+        run: |
+          F=windhawk/customwinver/mathexprsim.html
+          H=$(git log -1 --format='%h' -- "$F")
+          D=$(git log -1 --format='%cd' --date='format:%Y%m%d%I%M%p' -- "$F")
+          echo "window.APP_VERSION = '$H-${D:0:12}${D:12:1}';" > windhawk/customwinver/mathexprsim.version.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
